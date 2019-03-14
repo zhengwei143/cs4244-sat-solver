@@ -1,6 +1,6 @@
 from helpers import *
 
-def parser(formula):
+def parse_formula(formula):
     clauses = formula.split(AND)
     clauses = []
     variables = set()
@@ -21,7 +21,7 @@ def parser(formula):
 
     # Assign each variable a bit position
     position = 0
-    for variable in variables:
+    for variable in sorted(variables):
         literalPositions[variable] = position
         position += 1
         # Negations are kept one bit after its variable
@@ -33,5 +33,3 @@ def parser(formula):
 
     return matrix
 
-formula = "(a OR ~b OR c) AND (b OR d) AND (~a) AND (~d) AND (~a OR b)"
-matrix = parser(formula)
