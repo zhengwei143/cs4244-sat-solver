@@ -9,9 +9,18 @@ Each clause is represented as a binary value. Each variable in the formula and i
 By bit shifting, we can check each clause for a literal in O(1) time and propagate in O(1) time as well.
 
 ## Unit Propagation
-Unit propagation is done by masking the bit at the negated literal to propagate (e.g. to propagate (~y), bit mask the bit-position of (y)). If the value is equal to 0, this means that there are no literals in the clause (empty clause) and is hence a contradiction. If the value changes, we store the new value as a new state (explained in backtracking).
+Unit propagation of a unit clause l is carried out by applying the following 2 rules on other clauses:
+
+1. every clause (other than the unit clause itself) containing l is removed (the clause is satisfied if l is);
+2. in every clause that contains ¬l this literal is deleted (¬l can not contribute to it being satisfied).
+
+Rule 1 is done by masking the bit at the negated literal to propagate (e.g. to propagate (~y), bit mask the bit-position of (y)). If the value is equal to 0, this means that there are no literals in the clause (empty clause) and is hence a contradiction. If the value changes, we store the new value as a new state (explained in backtracking).
+
+Rule 2 is achieved by storing a new value of 0 as a new state for this clause at this decision level. The rationale is also explained in backtracking as we cannot simply delete the clause in case we have to backtrack in the future.
 
 Our algorithm checks the clauses for any unit clauses, and carries out unit propagation for each unit clause. We keep doing this until all unit clauses have been propagated (including newly generated unit clauses).
+
+Reference: https://en.wikipedia.org/wiki/Unit_propagation
 
 ## Backtracking 
 To allow for backtracking, we keep the previous states of each clause in an array, so that we can revert the states to the appropriate decision level when we backtrack. Each state is tagged with a decision level. We do not store a state for every clause at every decision level as this would take up too much space. Instead, we store the new state everytime the original state changes (as a result of propagation or variable assignment) and tag on the decision level as well (so we know which state we should revert to - the state with decision level <= decision level to revert to).
