@@ -1,8 +1,6 @@
 from math import *
 
-AND = "AND"
-OR = "OR"
-NOT = "~"
+NOT = "-"
 OPEN = "("
 CLOSE = ")"
 
@@ -61,7 +59,6 @@ class Matrix:
         return val
 
     def addClause(self, literals, decisionLevel):
-        print("Learning clause: ", literals)
         nextClauseNum = max(self.matrix.keys()) + 1
         self.matrix[nextClauseNum] = [(decisionLevel, self.toBinary(literals))]
 
@@ -88,6 +85,9 @@ class Matrix:
         return list(filter(lambda x: self.isUnitClause(x), self.clauses()))
 
     # Unit clause contains a single literal (e.g. (y))
+    # Returns a tuple containing (Bool, Number?)
+    # Boolean - represents if the propagation is valid - and no contradiction is reached
+    # Number - is the clause that caused a propagation or a contradiction
     # If the target clause contains the literal, remove it and return True
     # If the target clause contains the negation of the literal, remove the negation and return True
     # Returns False if a contradiction - e.g. resolving (~y), (y)
@@ -95,30 +95,35 @@ class Matrix:
         targetClauseBinary = self.getBinary(targetClauseNum)
         unitClauseBinary = self.getBinary(unitClauseNum)
         position = int(log(unitClauseBinary, 2))
-    
+
         # If the target clause has the unit literal, remove it
         if self.hasBit(targetClauseNum, position):
             # Keep track of which decision level it was removed at
             self.addDecisionValue(targetClauseNum, (self.decisionLevel, 0))
-            return (True, False)
+            return (True, None)
 
         # Get the mask of the negated literal (~y) - e.g. 11110111
         negatedPosition = self.negatePosition(position)
         mask = ~(1 << negatedPosition)
-
-        # If masking this clause does not affect it, skip
-        if not self.hasBit(targetClauseNum, negatedPosition):
-            return (True, False)
+        print(self.matrix)
+        if targetClauseBinary == 0:
+            # Target Clause was already a contradiction (caused by itself)
+            print("already a contradiction")
+            return (False, targetClauseNum)
 
         # Apply mask to target clause - to remove any literals (~y)
         result = targetClauseBinary & mask
         
-        # Contradiction reached
         if result == 0:
-            return (False, False)
+            # Contradiction reached as a result of unit propagation (caused by unit clause)
+            return (False, unitClauseNum)
         
+        # Else if masking this clause does not affect it, skip
+        if not self.hasBit(targetClauseNum, negatedPosition):
+            return (True, None)
+
         self.addDecisionValue(targetClauseNum, (self.decisionLevel, result))
-        return (True, True)
+        return (True, unitClauseNum)
 
     def negatePosition(self, position):
         if position % 2 == 0:
@@ -136,11 +141,6 @@ class Matrix:
             # Set decision level -> variable mapping
             self.dlVariableMapping[self.decisionLevel] = variable
 
-            # Remove all clauses with variable
-            for clause in self.clauses():
-                if self.hasBit(clause, position):
-                    self.addDecisionValue(clause, (self.decisionLevel, 0))
-                
             # Remove ~variable from all clauses
             negatedVariableMask = ~(1 << negatedPosition)
             for clause in self.clauses():
@@ -148,18 +148,10 @@ class Matrix:
                 if not self.hasBit(clause, negatedPosition):
                     continue
                 result = self.getBinary(clause) & negatedVariableMask
-                if result == 0:
-                    self.addDecisionValue(clause, (self.decisionLevel, 0))
-                    return False
                 self.addDecisionValue(clause, (self.decisionLevel, result))
         else:
             # Set decision level -> variable mapping
             self.dlVariableMapping[self.decisionLevel] = negate(variable)
-
-            # Remove all clauses with ~variable
-            for clause in self.clauses():
-                if self.hasBit(clause, negatedPosition):
-                    self.addDecisionValue(clause, (self.decisionLevel, 0))
 
             # Remove variable from all clauses
             variableMask = ~(1 << position)
@@ -168,9 +160,6 @@ class Matrix:
                 if not self.hasBit(clause, position):
                     continue
                 result = self.getBinary(clause) & variableMask
-                if result == 0:
-                    self.addDecisionValue(clause, (self.decisionLevel, 0))
-                    return False
                 self.addDecisionValue(clause, (self.decisionLevel, result))
         return True
 
@@ -186,5 +175,4 @@ class Matrix:
             dls = list(map(lambda x: x[0], self.matrix[clause]))
             levelsInvolved.update(set(dls))
         levelsInvolved = levelsInvolved.difference(set([0]))
-        print(self.dlVariableMapping)
         return (min(levelsInvolved), list(map(lambda x: self.dlVariableMapping[x], levelsInvolved)))

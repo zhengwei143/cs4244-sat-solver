@@ -1,26 +1,29 @@
-from cnf_parser import parse_formula, toVariable, negate
+from cnf_parser import parse_cnf, toVariable, negate
 
 # decisionLevel -> variable assignment
 previousAssignments = {}
 
 def cdcl(matrix):
-    result, resultantClauses = propagateUnitClauses(matrix)
-    if not result: # Conflict
-        return False
+    # result, resultantClauses = propagateUnitClauses(matrix)
+    # if not result: # Conflict
+    #     return False
 
     while not allVariablesAssigned(matrix):
         variable, value = pickBranching(matrix)
         if variable is None:
             # This occurs when both assignments for the variable have been tried
+            print("UNSAT!")
             return False
-        print((variable, value))
+        print("Assigning: ", (variable, value))
         matrix.assign(variable, value)
 
         result, resultantClauses = propagateUnitClauses(matrix)
-        print((result, resultantClauses))
+        print("Result: ", (result, resultantClauses))
         if not result:
             (lowestDl, variableAssignments) = matrix.variableAssignmentsInvolved(resultantClauses)
             backtrackAndLearn(matrix, lowestDl, variableAssignments)
+
+    return True
 
 def propagateUnitClauses(matrix):
     # For each clause, whenever a unit clause successfully propagates that clause
@@ -37,13 +40,14 @@ def propagateUnitClauses(matrix):
         for targetClause in matrix.clauses():
             if targetClause == unitClause:
                 continue
-            result, affectedByUnitClause = matrix.propagate(targetClause, unitClause)
-            if not result: # Conflict
-                # Clauses that lead to conflict
-                resultantClauses = clauseAffectedBy[targetClause].union(clauseAffectedBy[unitClause])
-                return (False, resultantClauses)
-            if affectedByUnitClause:
-                clauseAffectedBy[targetClause].update(clauseAffectedBy[unitClause])
+            print("target: ", targetClause)
+            valid, affectedByClause = matrix.propagate(targetClause, unitClause)
+            print((valid, affectedByClause))
+            if affectedByClause is not None:
+                clauseAffectedBy[targetClause].update(clauseAffectedBy[affectedByClause])
+            if not valid: # Conflict
+                # Return clauses that lead to conflict at target clause
+                return (False, clauseAffectedBy[targetClause])
 
         propagated.add(unitClause)
         unitClauses = set(matrix.unitClauses())
@@ -76,7 +80,7 @@ def backtrackAndLearn(matrix, lowestDecisionLevel, variableAssignments):
     literals = list(map(lambda x: negate(x), variableAssignments))
     matrix.addClause(literals, 0)
 
-formula = "(a) AND (~a OR b OR c) AND (~b) AND (~c)"
-matrix = parse_formula(formula)
+matrix = parse_cnf('input.cnf')
 
-cdcl(matrix)
+if cdcl(matrix):
+    print("SAT: ", previousAssignments)

@@ -1,23 +1,26 @@
 from helpers import *
 
-def parse_formula(formula):
-    clauses = formula.split(AND)
+SPACE = ' '
+COMMENT = 'c'
+INFO = 'p'
+
+def parse_cnf(filename):
     clauses = []
     variables = set()
     literalPositions = {}
+    file = open(filename, 'r')
 
-    # Splits the string into clauses and parses each literal
-    while formula:
-        openIdx = formula.index(OPEN)
-        closeIdx = formula.index(CLOSE)
-        clauseString = formula[openIdx+1:closeIdx]
-        literals = list(map(lambda x: x.strip(), clauseString.split(OR)))
+    for line in file.readlines():
+        values = line.split(SPACE)
+        if values[0] == COMMENT or values[0] == INFO:
+            continue
+        
+        # Ignore the last value 0
+        literals = list(map(lambda x: x.strip(), values[:-1]))
         clauses.append(literals)
         for literal in literals:
             var = toVariable(literal)
             variables.add(var)
-
-        formula = formula[closeIdx+1:]
 
     # Assign each variable a bit position
     position = 0
