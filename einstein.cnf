@@ -1,0 +1,36 @@
+c Variables:
+c - House Color: blue (1), green (2), red (3), white (4), yellow (5)
+c - Country: Dane (6), Brit (7), German (8), Swede (9), Norwegian (10)
+c - Drink: Beer (11), Coffee (12), Milk (13), Tea (14), Water (15)
+c - Cigarette: Blend (16), BlueMaster (17), Dunhill (18), PallMall (19), Prince (20)
+c - Pet: Birds (21), Cats (22), Dogs (23), Fish (24), Horses (25)
+p cnf 25
+c The Brit lives in the red house
+-7 3 0
+c The Swede keeps dogs as pets
+9 23 0
+c The Dane drinks tea
+6 14 0
+c The green house is on the left of the white house
+
+c The green house's owner drinks Coffee
+2 12 0
+c The person who smokes PallMall rears Birds
+19 21 0
+c The owner of the yellow house smokes Dunhill
+5 18 0
+c The man living in the center house drinks Milk
+
+c The Norwegian lives in the first house
+
+c The man who smokes Blends lives next to the one who keeps Cats
+
+c The man who keeps the horse lives next to the man who smokes Dunhill
+
+c The owner who smokes Bluemasters drinks beer
+17 11 0
+c The German smokes Prince
+8 20 0
+c The Norwegian lives next to the blue house
+
+c The man who smokes Blends has a neighbor who drinks water
