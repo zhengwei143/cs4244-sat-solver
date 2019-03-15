@@ -14,7 +14,7 @@ def cdcl(matrix):
         # print("assignments: ", previousAssignments)
         if variable is None:
             # This occurs when both assignments for the variable have been tried
-            print("UNSAT!")
+            # print("UNSAT!")
             return False
         # print("Assigning: ", (variable, value))
         success, variableAssignments = matrix.assign(variable, value)
@@ -25,8 +25,8 @@ def cdcl(matrix):
         result, resultantClauses = propagateUnitClauses(matrix)
         # print("Result: ", (result, resultantClauses))
         if not result:
-            (lowestDl, variableAssignments) = matrix.variableAssignmentsInvolved(resultantClauses)
-            backtrackAndLearn(matrix, lowestDl, variableAssignments)
+            (highestDl, variableAssignments) = matrix.variableAssignmentsInvolved(resultantClauses)
+            backtrackAndLearn(matrix, highestDl, variableAssignments)
 
     return True
 
@@ -86,21 +86,19 @@ def pickBranching(matrix):
     previousAssignments[dl] = (variable, STARTING_ASSIGNMENT, True)
     return previousAssignments[dl]
 
-def backtrackAndLearn(matrix, lowestDecisionLevel, variableAssignments):
-    matrix.backtrack(lowestDecisionLevel - 1)
-    # print("backtracing to: ", lowestDecisionLevel - 1)
+def backtrackAndLearn(matrix, highestDecisionLevel, variableAssignments):
+    matrix.backtrack(highestDecisionLevel - 1)
+    # print("backtracing to: ", highestDecisionLevel - 1)
     # print("vas: ", variableAssignments)
     keys = list(previousAssignments.keys())
     for key in keys:
-        if lowestDecisionLevel < key:
+        if highestDecisionLevel < key:
             del previousAssignments[key]
     literals = list(map(lambda x: negate(x), variableAssignments))
     matrix.addClause(literals, 0)
 
-matrix = parse_cnf('input.cnf')
-
-if cdcl(matrix):
-    print("SAT!")
-    # Print assignments
-    for values in previousAssignments.values():
-        print((values[0], values[1]))
+def run(filename):
+    # Reset assignments
+    previousAssignments = {}
+    matrix = parse_cnf(filename)
+    return cdcl(matrix)

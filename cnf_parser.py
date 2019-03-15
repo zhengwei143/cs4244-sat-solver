@@ -17,6 +17,8 @@ def parse_cnf(filename):
         
         # Ignore the last value 0
         literals = list(map(lambda x: x.strip(), values[:-1]))
+        if not literals:
+            continue
         clauses.append(literals)
         for literal in literals:
             var = toVariable(literal)
