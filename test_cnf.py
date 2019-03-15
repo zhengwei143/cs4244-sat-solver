@@ -8,8 +8,8 @@ numSat = 0
 for file in os.listdir(testFolder):
     # Benchmark
     isSatisfiable = 'yes' in file
-    if not isSatisfiable:
-        continue
+    #if not isSatisfiable:
+    #    continue
     
     filepath = os.path.join(testFolder, file)
     result = run(filepath)
