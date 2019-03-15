@@ -1,16 +1,17 @@
 from cnf_parser import parse_cnf, toVariable, negate
 from functools import reduce
 
-# decisionLevel -> variable assignment
-previousAssignments = {}
 
 def cdcl(matrix):
+    # decisionLevel -> variable assignment
+    previousAssignments = {}
+
     result, resultantClauses = propagateUnitClauses(matrix)
     if not result: # Conflict
         return False
     # print(matrix.literalPositions)
     while not allVariablesAssigned(matrix):
-        variable, value, anyRemainingAssignments = pickBranching(matrix)
+        variable, value, anyRemainingAssignments = pickBranching(matrix, previousAssignments)
         # print("assignments: ", previousAssignments)
         if variable is None:
             # This occurs when both assignments for the variable have been tried
@@ -19,14 +20,14 @@ def cdcl(matrix):
         # print("Assigning: ", (variable, value))
         success, variableAssignments = matrix.assign(variable, value)
         if not success:
-            backtrackAndLearn(matrix, matrix.decisionLevel, variableAssignments)
+            backtrackAndLearn(matrix, matrix.decisionLevel, variableAssignments, previousAssignments)
             continue
         # print("After assignment: ", matrix.display())
         result, resultantClauses = propagateUnitClauses(matrix)
         # print("Result: ", (result, resultantClauses))
         if not result:
             (highestDl, variableAssignments) = matrix.variableAssignmentsInvolved(resultantClauses)
-            backtrackAndLearn(matrix, highestDl, variableAssignments)
+            backtrackAndLearn(matrix, highestDl, variableAssignments, previousAssignments)
 
     return True
 
@@ -63,7 +64,7 @@ def propagateUnitClauses(matrix):
 def allVariablesAssigned(matrix):
     return len(matrix.dlVariableMapping) == len(matrix.variables())
 
-def pickBranching(matrix):
+def pickBranching(matrix, previousAssignments):
     dl = matrix.decisionLevel + 1
     
     # Picking a new assignment for a previously assigned
@@ -78,7 +79,7 @@ def pickBranching(matrix):
         return (variable, not parity, not anyRemainingAssignments)
 
     # TODO: Use some heuristic for pickbranching here, currently just randomly picking and setting to True.
-    variablesAssigned = list(map(lambda x: toVariable(x), matrix.dlVariableMapping.values()))
+    variablesAssigned = list(map(lambda x: toVariable(x[0]), previousAssignments.values()))
     diff = set(matrix.variables()).difference(set(variablesAssigned))
     variable = list(diff)[0]
     
@@ -86,10 +87,9 @@ def pickBranching(matrix):
     previousAssignments[dl] = (variable, STARTING_ASSIGNMENT, True)
     return previousAssignments[dl]
 
-def backtrackAndLearn(matrix, highestDecisionLevel, variableAssignments):
+def backtrackAndLearn(matrix, highestDecisionLevel, variableAssignments, previousAssignments):
     matrix.backtrack(highestDecisionLevel - 1)
     # print("backtracing to: ", highestDecisionLevel - 1)
-    # print("vas: ", variableAssignments)
     keys = list(previousAssignments.keys())
     for key in keys:
         if highestDecisionLevel < key:
@@ -99,6 +99,5 @@ def backtrackAndLearn(matrix, highestDecisionLevel, variableAssignments):
 
 def run(filename):
     # Reset assignments
-    previousAssignments = {}
     matrix = parse_cnf(filename)
     return cdcl(matrix)
