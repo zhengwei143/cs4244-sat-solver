@@ -20,3 +20,5 @@ To decide which level to backtrack to, when we run the propagation, we keep trac
 
 ## Current Progress
 We are currently stuck at fixing the correctness of our CDCL algorithm, and are testing it against the AIM dataset found on [https://www.cs.ubc.ca/~hoos/SATLIB/benchm.html]. Later on, we will be using a random CNF generator, and using the cryptominisat [https://github.com/msoos/cryptominisat] SAT solver as a benchmark.
+
+The CDCL algorithm is in `clcl.py`, and a file is run using the function `run()`.
