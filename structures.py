@@ -144,6 +144,20 @@ class AssignmentList:
         values_assigned = tuple(map(lambda x: len(x) != 0, self.assignments.values()))
         return reduce(lambda x, y: x and y, values_assigned)
 
+    def get_variable_assignment(self):
+        """ Returns a dictionary of the final variable assignment """
+        final = {}
+        for variable, assignments in self.assignments.items():
+            if len(assignments) == 0:
+                continue
+            final[variable] = assignments[-1]
+        return final
+
+    def __str__(self):
+        assignments = list(filter(lambda x: len(x[1]) > 0, self.assignments.items()))
+        assignments = list(map(lambda x: str(x[0]) + ":" + str(x[1][-1]), assignments))
+        return '(' + ', '.join(assignments) + ')'
+
 class Clause:
     """ Representation of a clause - contains multiple literals
     

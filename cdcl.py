@@ -1,7 +1,7 @@
 from structures import *
 import logging
 
-# logging.basicConfig(filename='debug.log', filemode='w', level=logging.debug)
+logging.basicConfig(filename='debug.log', filemode='w', level=logging.DEBUG)
 COMMENT = 'c'
 INFO = 'p'
 
@@ -9,12 +9,15 @@ def parse_cnf(filename):
     file = open(filename, 'r')
     clauses = []
     for line in file.readlines():
+        line = line.strip()
         # Skip comments or info lines
-        if COMMENT == line[0] or INFO == line[0]:
+        if not line or COMMENT == line[0] or INFO == line[0]:
             continue
-        
+        # print(line.strip())
         # Ignore last value
         literal_strings = line.split()[:-1]
+        if len(literal_strings) == 0:
+            continue
         literals = tuple(map(Literal, literal_strings))
         clauses.append(Clause(literals, 0))
 
@@ -23,15 +26,18 @@ def parse_cnf(filename):
 
 def cdcl(assignment_list, clauses):
     did_succeed, result = unit_propagation(assignment_list.decision_level, clauses)
+    # logging.debug("clauses: " + str(list(map(str, clauses))))
     if not did_succeed:
-        logging.debug("did not succeed after first propagation")
+        # logging.debug("did not succeed after first propagation")
         return False
     
     did_backtrack = False
     while not assignment_list.all_values_assigned() or did_backtrack:
         next_variable, value = assignment_list.assign_next(did_backtrack)
-        logging.debug("assignments: " + str(assignment_list.assignments))
-        logging.debug("decision_levels: " + str(assignment_list.decision_levels))
+        # print("decision_level: ", str(assignment_list.decision_level))
+        # print(assignment_list)
+        # logging.debug("assignments: " + str(assignment_list.assignments))
+        # logging.debug("decision_levels: " + str(assignment_list.decision_levels))
 
         # Variable assignment to clauses
         assigned_clauses = []
@@ -43,10 +49,10 @@ def cdcl(assignment_list, clauses):
             assigned_clauses.append(new_clause)
         clauses = assigned_clauses
 
-        logging.debug(str(next_variable) + ", " + str(value))
+        # logging.debug(str(next_variable) + ", " + str(value))
         if next_variable is None or value is None:
-            logging.debug("This probably shouldn't happen: either next_variable or value is None")
-            return False
+            # logging.debug("This probably shouldn't happen: either next_variable or value is None")
+            return (False, None)
 
         did_succeed, result = unit_propagation(assignment_list.decision_level, clauses)
         if not did_succeed: # Conflict
@@ -56,10 +62,11 @@ def cdcl(assignment_list, clauses):
             if backtrack_decision_level == -1:
                 logging.debug("Unable to backtrack any further...")
                 return False
-            logging.debug("backtracking to: " + str(backtrack_decision_level))
+            # logging.debug("backtracking to: " + str(backtrack_decision_level))
             assignment_list.backtrack(backtrack_decision_level)
             backtracked_clauses = list(map(lambda x: x.backtrack(backtrack_decision_level-1), clauses))
             backtracked_clauses.append(learnt_clause)
+            # logging.debug("Clause learnt: " + str(learnt_clause))
             did_backtrack = True
             clauses = backtracked_clauses
         else:
@@ -72,7 +79,7 @@ def cdcl(assignment_list, clauses):
         if clause.is_empty_clause():
             logging.debug("CONTRADICTION FOUND WHERE IT RETURNS BE SAT")
 
-    return True
+    return (True, assignment_list)
 
 
 def unit_propagation(decision_level, clauses):
@@ -81,7 +88,7 @@ def unit_propagation(decision_level, clauses):
     returns: If succeeeded, (True, new list of clauses)
         If contradiction, (False, clause that reached a contradiction)
     """
-    logging.debug("initial clauses: " + str(list(map(str, clauses))))
+    # logging.debug("initial clauses: " + str(list(map(str, clauses))))
     # Check for any empty clauses first.
     for clause in clauses:
         if clause.is_empty_clause():
@@ -89,7 +96,7 @@ def unit_propagation(decision_level, clauses):
 
     unpropagated_unit_clause = find_unpropagated_unit_clause(clauses)
     while unpropagated_unit_clause is not None:
-        logging.debug("propagating with: " + str(unpropagated_unit_clause))
+        # logging.debug("propagating with: " + str(unpropagated_unit_clause))
         # Set flag to True (so that it will not be propagated again)
         unpropagated_unit_clause.unit_clause_propagated = True
 
@@ -110,7 +117,7 @@ def unit_propagation(decision_level, clauses):
             new_clauses.append(new_clause)
 
         clauses = new_clauses
-        logging.debug("clauses: " + str(list(map(str, clauses))))
+        # logging.debug("clauses: " + str(list(map(str, clauses))))
         unpropagated_unit_clause = find_unpropagated_unit_clause(clauses)
 
     return (True, clauses)
