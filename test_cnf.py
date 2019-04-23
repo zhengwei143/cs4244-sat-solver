@@ -1,7 +1,8 @@
 from cdcl import *
 import os
 
-testFolder = 'test-data'
+# testFolder = 'test-data'
+testFolder = 'test-small'
 total = 0
 success = 0
 numSat = 0

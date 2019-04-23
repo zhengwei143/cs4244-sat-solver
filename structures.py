@@ -1,5 +1,5 @@
 import random
-from itertools import reduce
+from functools import reduce
 
 NOT = '-'
 
@@ -52,7 +52,7 @@ class AssignmentList:
         self.decision_level = 0
         self.assignments = {}
         for clause in clauses:
-            for literal in clause:
+            for literal in clause.literals:
                 variable = literal.get_variable()
                 self.assignments[variable] = []
         self.decision_levels = {}
@@ -103,12 +103,15 @@ class AssignmentList:
         return (value_assigned, at_decision_level)
 
     def get_backtrack_decision_level(self, min_decision_level):
-        """ Gets the decision level that we can backtrack to
-        min_decision_level might already have two previous assignments, so we need to backtrack further by one.
+        """ Gets the decision level that we can backtrack to:
+        min_decision_level might already have two previous assignments, so we might need to backtrack further by one.
 
         :param min_decision_level: Minimum decision level that lead to a contradiction (from conflict analysis)
         """
-        variable_at_min_dl = 
+        variable_at_min_dl = list(filter(lambda x: x[1] == min_decision_level, self.decision_levels.items))[0]
+        if len(self.assignments[variable_at_min_dl]) == 2:
+            return min_decision_level - 1
+        return min_decision_level
 
     def backtrack(self, to_decision_level):
         """ Backtracks to the decision level """
@@ -156,9 +159,9 @@ class Clause:
         returns: a newly clause if propagated, else itself
         """
         literal = unit_clause.literals[0]
-        if literal.negated() not in self.literals:
+        if literal.negation() not in self.literals:
             return self
-        new_literals = tuple(filter(lambda x: x != literal.negated(), self.literals))
+        new_literals = tuple(filter(lambda x: x != literal.negation(), self.literals))
         new_clause = Clause(new_literals, at_decision_level, False, self, unit_clause)
         return new_clause
 
@@ -172,13 +175,13 @@ class Clause:
         # Situation 1: When the clause becomes True by variable assignment:
         #   Assigning True to a variable that exists in the clause or
         #   Assigning False to a variable has its negation in the clause 
-        if (with_value and variable in self.literals) or (not with_value and variable.negated() in self.literals):
+        if (with_value and variable in self.literals) or (not with_value and variable.negation() in self.literals):
             return Clause(self.literals, at_decision_level, True, self, None)
         
         # Situation 2: When a literal in the clause no longer needs to be considered because it is False
         #   Remove any instance of the literal in the clause and return a new clause
-        if with_value and variable.negated() in self.literals:
-            new_literals = tuple(filter(lambda x: x != variable.negated(), self.literals))
+        if with_value and variable.negation() in self.literals:
+            new_literals = tuple(filter(lambda x: x != variable.negation(), self.literals))
             return Clause(new_literals, at_decision_level, False, self, None)
         elif not with_value and variable in self.literals:
             new_literals = tuple(filter(lambda x: x != variable, self.literals))

@@ -32,9 +32,12 @@ def cdcl(assignment_list, clauses):
         if not did_succeed: # Conflict
             learnt_clause, min_decision_level = result.learn_new_clause(assignment_list)
             # Check if we can backtrack to min_decision_level
-            backtrack_decision_level = 
+            backtrack_decision_level = assignment_list.get_backtrack_decision_level(min_decision_level)
+            if backtrack_decision_level == -1:
+                print("Unable to backtrack any further...")
+                return False
 
-            backtracked_clauses = list(map(lambda x: x.backtrack(min_decision_level - 1), clauses))
+            backtracked_clauses = list(map(lambda x: x.backtrack(backtrack_decision_level), clauses))
             backtracked_clauses.append(learnt_clause)
             clauses = backtracked_clauses
         else:
