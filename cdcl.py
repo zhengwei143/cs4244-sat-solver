@@ -11,7 +11,9 @@ def parse_cnf(filename):
         if COMMENT == line[0] or INFO == line[0]:
             continue
         
-        literals = tuple(map(Literal, line.split()))
+        # Ignore last value
+        literal_strings = line.split()[:-1]
+        literals = tuple(map(Literal, literal_strings))
         clauses.append(Clause(literals, 0))
 
     assignment_list = AssignmentList(clauses)
@@ -24,6 +26,7 @@ def cdcl(assignment_list, clauses):
     
     while not assignment_list.all_values_assigned():
         next_variable, value = assignment_list.assign_next()
+        # print(next_variable, value)
         if next_variable is None or value is None:
             print("This probably shouldn't happen: either next_variable or value is None")
             return False
@@ -84,8 +87,6 @@ def find_unpropagated_unit_clause(clauses):
         if clause.is_unit_clause() and not clause.unit_clause_propagated:
             return clause
     return None
-
-
 
 def run(filename):
     assignment_list, clauses = parse_cnf(filename)

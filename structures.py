@@ -76,8 +76,9 @@ class AssignmentList:
             - Temporarily finds the first unassigned variable
         """
         for variable, assignment in self.assignments.items():
-            if assignment is None:
-                return variable
+            if len(assignment) == 2:
+                continue
+            return variable
         return None
 
     def value_to_assign(self, variable):
@@ -85,7 +86,7 @@ class AssignmentList:
         TODO: Implement heuristic to decide value to assign
             - Temporarily randomly picks first value to assign it
         """
-        if len(self.assignments[variable] == 2):
+        if len(self.assignments[variable]) == 2:
             return None
         if len(self.assignments[variable]) == 0:
             values = [True, False]
@@ -108,7 +109,7 @@ class AssignmentList:
 
         :param min_decision_level: Minimum decision level that lead to a contradiction (from conflict analysis)
         """
-        variable_at_min_dl = list(filter(lambda x: x[1] == min_decision_level, self.decision_levels.items))[0]
+        variable_at_min_dl = list(filter(lambda x: x[1] == min_decision_level, self.decision_levels.items()))[0][0]
         if len(self.assignments[variable_at_min_dl]) == 2:
             return min_decision_level - 1
         return min_decision_level
@@ -233,7 +234,7 @@ class Clause:
 
         dfs(self)
         new_literals = []
-        min_decision_level = int('inf')
+        min_decision_level = len(assignment_list.assignments) + 1
         for variable in variable_set:
             value_assigned, at_decision_level = assignment_list.get_dl_variable_assignment(variable)
             # Variables that were not assigned a value should not be added to the learnt clause
