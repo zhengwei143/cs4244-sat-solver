@@ -1,5 +1,6 @@
 import random
 from functools import reduce
+import logging
 
 NOT = '-'
 
@@ -57,29 +58,42 @@ class AssignmentList:
                 self.assignments[variable] = []
         self.decision_levels = {}
 
-    def assign_next(self):
-        """ Assigns the next variable with a boolean value """
-        next_variable = self.pickbranching_variable()
-        if next_variable is None:
+    def assign_next(self, did_backtrack):
+        """ Assigns the next variable with a boolean value,
+        If the algorithm did backtrack, look to replace the variable at the current decision level
+        """
+        next_variable, value = self.pickbranching_variable(did_backtrack)
+        if next_variable is None or value is None:
             return (None, None)
-        value = self.value_to_assign(next_variable)
-        if value is None:
-            return (None, None)
-        self.decision_level += 1
+        if not did_backtrack:
+            self.decision_level += 1
         self.assignments[next_variable].append(value)
         self.decision_levels[next_variable] = self.decision_level
-        return (next_variable, value)
+        return (Literal(next_variable), value)
 
-    def pickbranching_variable(self):
+    def pickbranching_variable(self, did_backtrack):
         """ Pickbranching to decide which variable to pick for assignment next
         TODO: Implement pickbranching heuristic
             - Temporarily finds the first unassigned variable
         """
-        for variable, assignment in self.assignments.items():
-            if len(assignment) == 2:
-                continue
-            return variable
-        return None
+        variable = None
+        if did_backtrack: # Select the variable at the current decision_level
+            variable = list(filter(lambda x: x[1] == self.decision_level, self.decision_levels.items()))[0][0]
+        else:
+            for var, assignment in self.assignments.items():
+                if len(assignment) == 2 or var in self.decision_levels:
+                    continue
+                variable = var
+                break
+        if variable is None or len(self.assignments[variable]) == 2:
+            return (None, None)
+        if len(self.assignments[variable]) == 0:
+            values = [True, False]
+            random.shuffle(values)
+            value = values[0]
+        else:
+            value = not self.assignments[variable][-1]
+        return (variable, value)
 
     def value_to_assign(self, variable):
         """ Decides what value to assign the next variable
@@ -106,17 +120,21 @@ class AssignmentList:
     def get_backtrack_decision_level(self, min_decision_level):
         """ Gets the decision level that we can backtrack to:
         min_decision_level might already have two previous assignments, so we might need to backtrack further by one.
+        Find the maximum decision_level <= min_decision_level that does already have two assignments
 
         :param min_decision_level: Minimum decision level that lead to a contradiction (from conflict analysis)
         """
-        variable_at_min_dl = list(filter(lambda x: x[1] == min_decision_level, self.decision_levels.items()))[0][0]
-        if len(self.assignments[variable_at_min_dl]) == 2:
-            return min_decision_level - 1
-        return min_decision_level
+        predicate = lambda x: len(self.assignments[x[0]]) < 2 and x[1] <= min_decision_level
+        valid_items = list(filter(predicate, self.decision_levels.items()))
+        if len(valid_items) == 0:
+            return -1 
+        return max(valid_items, key=lambda x: x[1])[1]
 
     def backtrack(self, to_decision_level):
         """ Backtracks to the decision level """
-        for variable, decision_level in self.decision_levels.items():
+        self.decision_level = to_decision_level
+        items = list(self.decision_levels.items())
+        for variable, decision_level in items:
             if decision_level > to_decision_level:
                 del self.decision_levels[variable]
                 self.assignments[variable] = []
@@ -126,31 +144,28 @@ class AssignmentList:
         values_assigned = tuple(map(lambda x: len(x) != 0, self.assignments.values()))
         return reduce(lambda x, y: x and y, values_assigned)
 
-    
-
-
 class Clause:
     """ Representation of a clause - contains multiple literals
     
     :attribute literals: a tuple of literals it contains
     :attribute decision_level: the decision level it was created at
-    :attribute evaluation: when a clause is evaluated to be True through variable assignment
+    :attribute evaluated_true: when a clause is evaluated to be True through variable assignment
         - This is set to True, else False
     :attribute previous_clause: a link to the previous clause it was created from (for backtracking)
     :attribute propagated_by: a link to the unit clause it was propagated with
     :attribute unit_clause_propagated: Only used for unit clauses as a flag to indicate if it has been propagated before
     """
 
-    def __init__(self, literals, decision_level = -1, evaluation = False, previous_clause = None, propagated_by = None):
+    def __init__(self, literals, decision_level = -1, evaluated_true = False, previous_clause = None, propagated_by = None):
         self.literals = literals
         self.decision_level = decision_level
-        self.evaluation = evaluation
+        self.evaluated_true = evaluated_true
         self.previous_clause = previous_clause
         self.propagated_by = propagated_by
         self.unit_clause_propagated = False
 
     def is_unit_clause(self):
-        return self.literals
+        return len(self.literals) == 1
 
     def propagate_with(self, unit_clause, at_decision_level):
         """ Resolves the current Clause with another Clause, generating a new Clause
@@ -240,7 +255,7 @@ class Clause:
             # Variables that were not assigned a value should not be added to the learnt clause
             if value_assigned is None:
                 continue
-            min_decision_level = min(min_decision_level, at_decision_level)
+            min_decision_level = max(min_decision_level, at_decision_level)
             literal = Literal.init_from_variable(variable, not value_assigned)
             new_literals.append(literal)
         
@@ -250,5 +265,7 @@ class Clause:
         return (Clause(new_literals, 0), min_decision_level)
 
     def __str__(self):
-        return ' '.join(self.literals)
+        if self.evaluated_true:
+            return '(TRUE)'
+        return '(' + ', '.join(map(str, self.literals)) + ')'
 

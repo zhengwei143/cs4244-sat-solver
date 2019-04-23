@@ -16,7 +16,7 @@ for file in os.listdir(testFolder):
     result = run(filepath)
     total += 1
     if isSatisfiable == result:
-        print("success!")
+        print("success! Answer is: ", isSatisfiable, "and got: ", result)
         success += 1
     else:
         print("Supposed to be: ", isSatisfiable, "but got: ", result)
