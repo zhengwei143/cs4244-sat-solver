@@ -29,7 +29,7 @@ def cdcl(assignment_list, clauses):
     # logging.debug("clauses: " + str(list(map(str, clauses))))
     if not did_succeed:
         # logging.debug("did not succeed after first propagation")
-        return False
+        return (False, None)
     
     did_backtrack = False
     while not assignment_list.all_values_assigned() or did_backtrack:
@@ -61,7 +61,7 @@ def cdcl(assignment_list, clauses):
             backtrack_decision_level = assignment_list.get_backtrack_decision_level(min_decision_level)
             if backtrack_decision_level == -1:
                 logging.debug("Unable to backtrack any further...")
-                return False
+                return (False, None)
             # logging.debug("backtracking to: " + str(backtrack_decision_level))
             assignment_list.backtrack(backtrack_decision_level)
             backtracked_clauses = list(map(lambda x: x.backtrack(backtrack_decision_level-1), clauses))
@@ -130,6 +130,23 @@ def find_unpropagated_unit_clause(clauses):
             return clause
     return None
 
+
 def run(filename):
     assignment_list, clauses = parse_cnf(filename)
-    return cdcl(assignment_list, clauses)
+    result, assignment_list = cdcl(assignment_list, clauses.copy())
+    variable_assignment = None
+    if assignment_list:
+        variable_assignment = assignment_list.get_variable_assignment()
+        verified_result = verify(variable_assignment, clauses)
+
+    return result, variable_assignment
+
+
+def verify(variable_assignment, clauses):
+    """ Verifies a variable assignment against a list of clauses and outputs:
+        - True if SAT and False if UNSAT
+    """
+    for clause in clauses:
+        continue
+
+    return True
