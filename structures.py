@@ -60,6 +60,7 @@ class AssignmentList:
     :attribute assignments: Dictionary containing the variable and the decision level it was assigned
         - { variable string -> decision level }
     :attribute vsids: Dictionary containing the literal and its count. Used in the pickbranching heuristic
+    :attribute branching_count: Int counter that indicates the number of times a variable is re-assigned due to a backtrack
     """
 
     def __init__(self, clauses):
@@ -72,6 +73,7 @@ class AssignmentList:
                 variable = literal.get_variable()
                 self.assignments[variable] = []
         self.decision_levels = {}
+        self.branching_count = 0
 
     def assign_next(self, did_backtrack):
         """ Assigns the next variable with a boolean value,
@@ -87,12 +89,18 @@ class AssignmentList:
         return (Literal(next_variable), value)
 
     def pickbranching_variable(self, did_backtrack):
+        # Choose pickbranching implementation here.
+        return self.pickbranching_variable_vsids(did_backtrack)
+        # return self.pickbranching_variable_random(did_backtrack)
+
+    def pickbranching_variable_vsids(self, did_backtrack):
         """ Pickbranching heuristic to decide which variable assignment to choose
         Currently implementing VSIDS:
         """
         if did_backtrack: # Select the variable at the current decision_level
             variable = list(filter(lambda x: x[1] == self.decision_level, self.decision_levels.items()))[0][0]
             value = not self.assignments[variable][-1]
+            self.branching_count += 1
             return (variable, value)
         else:
             # Predicate: variable must be unassigned at the current decision level
@@ -101,6 +109,30 @@ class AssignmentList:
             variable = literal.get_variable()
             value = not literal.is_negation()
             return (variable, value)
+
+    def pickbranching_variable_random(self, did_backtrack):
+        """ Pickbranching to decide which variable to pick for assignment next
+            - Temporarily finds the first unassigned variable and assigns a random value
+        """
+        variable = None
+        if did_backtrack: # Select the variable at the current decision_level
+            variable = list(filter(lambda x: x[1] == self.decision_level, self.decision_levels.items()))[0][0]
+            self.branching_count += 1
+        else:
+            for var, assignment in self.assignments.items():
+                if len(assignment) == 2 or var in self.decision_levels:
+                    continue
+                variable = var
+                break
+        if variable is None or len(self.assignments[variable]) == 2:
+            return (None, None)
+        if len(self.assignments[variable]) == 0:
+            values = [True, False]
+            random.shuffle(values)
+            value = values[0]
+        else:
+            value = not self.assignments[variable][-1]
+        return (variable, value)
 
     def update_vsids_with(self, clause):
         """ When a clause is learnt,

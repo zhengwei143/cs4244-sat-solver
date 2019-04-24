@@ -142,11 +142,11 @@ def run(filename):
         # print("Verifying with variable assignment: ", variable_assignment)
         verified_result = verify(variable_assignment, clauses)
         if verified_result == result:
-            print("Successfuly Verified to be: ", verified_result)
+            logging.info("Successfuly Verified to be: " + str(verified_result))
         else:
-            print("ERROR Verified to be: ", verified_result, " but result was: ", result)
+            logging.info("ERROR Verified to be: " + str(verified_result) + " but result was: " + str(result))
 
-    return result, variable_assignment
+    return result, variable_assignment, assignment_list.branching_count
 
 
 def verify(variable_assignment, clauses):
