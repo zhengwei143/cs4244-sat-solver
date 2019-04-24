@@ -30,7 +30,7 @@ def cdcl(assignment_list, clauses):
     # logging.debug("clauses: " + str(list(map(str, clauses))))
     if not did_succeed:
         # logging.debug("did not succeed after first propagation")
-        return (False, None)
+        return (False, assignment_list)
     
     did_backtrack = False
     while not assignment_list.all_values_assigned() or did_backtrack:
@@ -53,7 +53,7 @@ def cdcl(assignment_list, clauses):
         # logging.debug(str(next_variable) + ", " + str(value))
         if next_variable is None or value is None:
             # logging.debug("This probably shouldn't happen: either next_variable or value is None")
-            return (False, None)
+            return (False, assignment_list)
 
         did_succeed, result = unit_propagation(assignment_list.decision_level, clauses)
         if not did_succeed: # Conflict
@@ -62,7 +62,7 @@ def cdcl(assignment_list, clauses):
             backtrack_decision_level = assignment_list.get_backtrack_decision_level(max_decision_level)
             if backtrack_decision_level == -1:
                 logging.debug("Unable to backtrack any further...")
-                return (False, None)
+                return (False, assignment_list)
             # logging.debug("backtracking to: " + str(backtrack_decision_level))
             assignment_list.backtrack(backtrack_decision_level)
             # Need to backtrack one step further for clauses (as it will be reassigned without incrementing decision level in the next iteration)
@@ -142,9 +142,7 @@ def run(filename):
     time_elapsed = end - start
     logging.info("Time Elapsed: " + str(time_elapsed))
     variable_assignment = None
-    branching_count = None
-    if assignment_list:
-        branching_count = assignment_list.branching_count
+    if result:
         variable_assignment = assignment_list.get_variable_assignment()
         # print("Verifying with variable assignment: ", variable_assignment)
         verified_result = verify(variable_assignment, clauses)
@@ -153,7 +151,7 @@ def run(filename):
         else:
             logging.info("ERROR Verified to be: " + str(verified_result) + " but result was: " + str(result))
 
-    return result, variable_assignment, branching_count, time_elapsed
+    return result, variable_assignment, assignment_list.branching_count, time_elapsed
 
 
 def verify(variable_assignment, clauses):

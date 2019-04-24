@@ -23,8 +23,7 @@ for file in os.listdir(testFolder):
     filepath = os.path.join(testFolder, file)
     result, assignment_list, branching_count, time_elapsed = run(filepath)
 
-    if branching_count:
-        total_branches += branching_count
+    total_branches += branching_count
     total += 1
     total_time += time_elapsed
     if isSatisfiable == result:
