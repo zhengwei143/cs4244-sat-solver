@@ -26,12 +26,17 @@ def parse_cnf(filename):
     return (assignment_list, clauses)
 
 def cdcl(assignment_list, clauses):
-    did_succeed, result = unit_propagation(assignment_list.decision_level, clauses)
+    """ Conflict Driven Clause Learning Algorithm 
+    returns: (SAT/UNSAT boolean, AssignmentList, learnt_clauses)
+    """
+    did_succeed, new_clauses, result = unit_propagation(assignment_list.decision_level, clauses)
     # logging.debug("clauses: " + str(list(map(str, clauses))))
     if not did_succeed:
         # logging.debug("did not succeed after first propagation")
-        return (False, assignment_list)
+        return (False, assignment_list, [])
     
+    all_learnt_clauses = []
+
     did_backtrack = False
     while not assignment_list.all_values_assigned() or did_backtrack:
         next_variable, value = assignment_list.assign_next(did_backtrack)
@@ -50,52 +55,55 @@ def cdcl(assignment_list, clauses):
             assigned_clauses.append(new_clause)
         clauses = assigned_clauses
 
-        # logging.debug(str(next_variable) + ", " + str(value))
-        if next_variable is None or value is None:
-            # logging.debug("This probably shouldn't happen: either next_variable or value is None")
-            return (False, assignment_list)
-
-        did_succeed, result = unit_propagation(assignment_list.decision_level, clauses)
+        did_succeed, new_clauses, contradiction_clause = unit_propagation(assignment_list.decision_level, clauses)
         if not did_succeed: # Conflict
-            learnt_clause, max_decision_level = result.learn_new_clause(assignment_list)
+            learnt_clause, max_decision_level = contradiction_clause.learn_new_clause(assignment_list)
             # Check if we can backtrack to max_decision_level
             backtrack_decision_level = assignment_list.get_backtrack_decision_level(max_decision_level)
             if backtrack_decision_level == -1:
                 logging.debug("Unable to backtrack any further...")
-                return (False, assignment_list)
+                # learnt_clauses = list(filter(lambda x: x.learnt, clauses))
+                # check_learnt_clauses(learnt_clauses)
+                return (False, assignment_list, all_learnt_clauses)
             # logging.debug("backtracking to: " + str(backtrack_decision_level))
             assignment_list.backtrack(backtrack_decision_level)
             # Need to backtrack one step further for clauses (as it will be reassigned without incrementing decision level in the next iteration)
             backtracked_clauses = list(map(lambda x: x.backtrack(backtrack_decision_level-1), clauses))
             backtracked_clauses.append(learnt_clause)
+            logging.debug("Learnt Clause: " + str(learnt_clause))
             assignment_list.update_vsids_with(learnt_clause)
-            # logging.debug("Clause learnt: " + str(learnt_clause))
             did_backtrack = True
             clauses = backtracked_clauses
+            
+            if not all_learnt_clauses or all_learnt_clauses[-1][1] > max_decision_level:
+                all_learnt_clauses = []
+            all_learnt_clauses.append((learnt_clause, max_decision_level))
+            # learnt_clauses = list(filter(lambda x: x.learnt, clauses))
+            # logging.info("Num learnt clauses: " + str(len(learnt_clauses)))
         else:
             # Unit propagation successful, replace old clauses with newly propagated clauses
             did_backtrack = False
-            clauses = result
+            clauses = new_clauses
 
     # Sanity check to make sure that clauses here are not contradictions
     for clause in clauses:
         if clause.is_empty_clause():
             logging.debug("CONTRADICTION FOUND WHERE IT RETURNS BE SAT")
 
-    return (True, assignment_list)
+    return (True, assignment_list, all_learnt_clauses)
 
 
 def unit_propagation(decision_level, clauses):
     """ Carries out unit propagation on the list of clauses
 
-    returns: If succeeeded, (True, new list of clauses)
-        If contradiction, (False, clause that reached a contradiction)
+    returns: If succeeeded, (True, new list of clauses, None)
+        If contradiction, (False, new list of clauses, clause that reached a contradiction)
     """
     # logging.debug("initial clauses: " + str(list(map(str, clauses))))
     # Check for any empty clauses first.
     for clause in clauses:
         if clause.is_empty_clause():
-            return (False, clause)
+            return (False, clauses, clause)
 
     unpropagated_unit_clause = find_unpropagated_unit_clause(clauses)
     while unpropagated_unit_clause is not None:
@@ -115,7 +123,7 @@ def unit_propagation(decision_level, clauses):
 
             # Contradiction reached
             if new_clause.is_empty_clause():
-                return (False, new_clause)
+                return (False, clauses, new_clause)
 
             new_clauses.append(new_clause)
 
@@ -123,7 +131,7 @@ def unit_propagation(decision_level, clauses):
         # logging.debug("clauses: " + str(list(map(str, clauses))))
         unpropagated_unit_clause = find_unpropagated_unit_clause(clauses)
 
-    return (True, clauses)
+    return (True, clauses, None)
 
 
 def find_unpropagated_unit_clause(clauses):
@@ -133,11 +141,26 @@ def find_unpropagated_unit_clause(clauses):
             return clause
     return None
 
+def check_learnt_clauses(learnt_clauses):
+    reduced_clause = None
+    logging.info("Reduced Clause: " + str(reduced_clause))
+    for clause in learnt_clauses:
+        if reduced_clause is None:
+            reduced_clause = clause
+            continue
+        variable = clause.learnt
+        reduced_clause, is_true = reduced_clause.resolution_with(clause, variable)
+        logging.info("Reduced Clause: " + str(reduced_clause))
+        if is_true:
+            reduced_clause = None
+
 
 def run(filename):
     assignment_list, clauses = parse_cnf(filename)
     start = time.time()
-    result, assignment_list = cdcl(assignment_list, clauses.copy())
+    result, assignment_list, learnt_clauses_dl = cdcl(assignment_list, clauses.copy())
+    learnt_clauses = list(map(lambda x: x[0], learnt_clauses_dl))
+    
     end = time.time()
     time_elapsed = end - start
     logging.info("Time Elapsed: " + str(time_elapsed))
@@ -150,9 +173,20 @@ def run(filename):
             logging.info("Successfuly Verified to be: " + str(verified_result))
         else:
             logging.info("ERROR Verified to be: " + str(verified_result) + " but result was: " + str(result))
+    else: # Contradiction
+        logging.info("Number of learnt clauses: " + str(len(learnt_clauses)))
+        all_proofs = []
+        all_involved_clauses = []
+        for learnt_clause in learnt_clauses:
+            empty_clause = learnt_clause.previous_clause
+            proofs, involved_clauses = empty_clause.generate_contradiction_proof()
+            all_proofs.extend(proofs)
+            all_involved_clauses.extend(involved_clauses)
+        # output_contradiction_proof(all_proofs, all_involved_clauses)
+        
+        check_learnt_clauses(learnt_clauses)
 
     return result, variable_assignment, assignment_list.branching_count, time_elapsed
-
 
 def verify(variable_assignment, clauses):
     """ Verifies a variable assignment against a list of clauses and outputs:
@@ -163,3 +197,29 @@ def verify(variable_assignment, clauses):
     for clause in clauses:
         result = result and clause.evaluate(variable_assignment)
     return result
+
+def output_contradiction_proof(proofs, clauses):
+    """ Logs the contradiction proof in the required format to a file """
+    # Sorts the clauses by order of increasing decision level
+    ordered_clauses = sorted(list(clauses), key=lambda x: x.decision_level)
+
+    # First segment - number of clauses used in proof
+    initial_line = "v " + str(len(ordered_clauses))
+    logging.info(initial_line)
+
+    # Second segment - clauses and their unique ids
+    for i, clause in enumerate(ordered_clauses):
+        clause_identifier_line = str(i) + ": " + clause.format_string()
+        logging.info(clause_identifier_line)
+
+    # Third segment - proofs:
+    for previous_clause, propagated_by_clause, resultant_clause in proofs:
+        # print(previous_clause)
+        # print(previous_clause.previous_clause)
+        # print(previous_clause.propagated_by)
+        previous_id = ordered_clauses.index(previous_clause)
+        # print(propagated_by_clause)
+        propagated_by_id = ordered_clauses.index(propagated_by_clause)
+        resultant_id = ordered_clauses.index(resultant_clause)
+        resolution_line = " ".join(map(str, [previous_id, propagated_by_id, resultant_id]))
+        logging.info(resolution_line)

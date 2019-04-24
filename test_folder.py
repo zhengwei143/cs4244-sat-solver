@@ -4,6 +4,7 @@ import os
 # testFolder = 'test-data'
 # testFolder = 'test-small' # Taking forever
 testFolder = 'uf50-218' # Seems to be correct
+testFolder = 'uuf50'
 total = 0
 total_branches = 0
 success = 0

@@ -48,6 +48,9 @@ class Literal:
     def __str__(self):
         return self.value
     
+    def __lt__(self, other):
+        return self.value < other.value
+
     def __hash__(self):
         return hash(self.value)
 
@@ -201,15 +204,19 @@ class Clause:
     :attribute previous_clause: a link to the previous clause it was created from (for backtracking)
     :attribute propagated_by: a link to the unit clause it was propagated with
     :attribute unit_clause_propagated: Only used for unit clauses as a flag to indicate if it has been propagated before
+    :attribute learnt: Boolean flag to indicate whether or not this is a learnt clause (from a refutation)
     """
 
-    def __init__(self, literals, decision_level = -1, evaluated_true = False, previous_clause = None, propagated_by = None):
+    def __init__(self, literals, decision_level = -1, evaluated_true = False,
+        previous_clause = None, propagated_by = None, hidden_literals = set()):
         self.literals = literals
+        self.hidden_literals = hidden_literals
         self.decision_level = decision_level
         self.evaluated_true = evaluated_true
         self.previous_clause = previous_clause
         self.propagated_by = propagated_by
         self.unit_clause_propagated = False
+        self.learnt = None
 
     def is_unit_clause(self):
         return len(self.literals) == 1
@@ -225,7 +232,13 @@ class Clause:
         if literal.negation() not in self.literals:
             return self
         new_literals = tuple(filter(lambda x: x != literal.negation(), self.literals))
-        new_clause = Clause(new_literals, at_decision_level, False, self, unit_clause)
+        
+        # If at the same level, modifies itself
+        if self.decision_level == at_decision_level:
+            self.literals = new_literals
+            return self
+        hidden_literals = self.hidden_literals.union(unit_clause.hidden_literals)
+        new_clause = Clause(new_literals, at_decision_level, False, self, unit_clause, hidden_literals)
         return new_clause
 
     def assign(self, variable, with_value, at_decision_level):
@@ -238,17 +251,23 @@ class Clause:
         # Situation 1: When the clause becomes True by variable assignment:
         #   Assigning True to a variable that exists in the clause or
         #   Assigning False to a variable has its negation in the clause 
-        if (with_value and variable in self.literals) or (not with_value and variable.negation() in self.literals):
-            return Clause(self.literals, at_decision_level, True, self, None)
+        if with_value and variable in self.literals:
+            hidden_literals = self.hidden_literals.union([variable])
+            return Clause(self.literals, at_decision_level, True, self, None, hidden_literals)
+        elif not with_value and variable.negation() in self.literals:
+            hidden_literals = self.hidden_literals.union([variable.negation()])
+            return Clause(self.literals, at_decision_level, True, self, None, hidden_literals)
         
         # Situation 2: When a literal in the clause no longer needs to be considered because it is False
         #   Remove any instance of the literal in the clause and return a new clause
         if with_value and variable.negation() in self.literals:
             new_literals = tuple(filter(lambda x: x != variable.negation(), self.literals))
-            return Clause(new_literals, at_decision_level, False, self, None)
+            hidden_literals = self.hidden_literals.union([variable.negation()])
+            return Clause(new_literals, at_decision_level, False, self, None, hidden_literals)
         elif not with_value and variable in self.literals:
             new_literals = tuple(filter(lambda x: x != variable, self.literals))
-            return Clause(new_literals, at_decision_level, False, self, None)
+            hidden_literals = self.hidden_literals.union([variable])
+            return Clause(new_literals, at_decision_level, False, self, None, hidden_literals)
 
         # A new clause is NOT created
         return self
@@ -296,20 +315,25 @@ class Clause:
 
         dfs(self)
         new_literals = []
-        max_decision_level = len(assignment_list.assignments) + 1
+        max_decision_level = -1
+        max_variable = None
         for variable in variable_set:
             value_assigned, at_decision_level = assignment_list.get_dl_variable_assignment(variable)
             # Variables that were not assigned a value should not be added to the learnt clause
             if value_assigned is None:
                 continue
-            max_decision_level = max(max_decision_level, at_decision_level)
+            if max_decision_level < at_decision_level:
+                max_decision_level = at_decision_level
+                max_variable = variable
             literal = Literal.init_from_variable(variable, not value_assigned)
             new_literals.append(literal)
         
         assert(len(new_literals) != 0, "Newly learned clause should have non-empty literal list")
         
         # Newly learnt clause should start at decision level 0
-        return (Clause(new_literals, 0), max_decision_level)
+        learnt_clause = Clause(tuple(new_literals), 0, False, self, None, set())
+        learnt_clause.learnt = max_variable
+        return (learnt_clause, max_decision_level)
 
     def evaluate(self, variable_assignment):
         """ Given a variable assignment, evaluates the boolean value of the clause by:
@@ -324,4 +348,72 @@ class Clause:
         if self.evaluated_true:
             return '(TRUE)'
         return '(' + ', '.join(map(str, self.literals)) + ')'
+
+    def format_string(self):
+        if self.evaluated_true:
+            return '(TRUE)'
+        sorted_hidden_literals = sorted(list(self.hidden_literals))
+        literals = list(self.literals) + sorted_hidden_literals
+        return ' '.join(map(str, literals)) 
+
+    #####################################################
+    # Methods to used in generating contradiction proof #
+    #####################################################
+
+    def generate_contradiction_proof(self):
+        """ Generates the proof of contradiction """
+        assert(self.is_empty_clause(), "Should only be generating a proof for contradictions (empty clauses)")
+        proofs = []
+        visited_clauses = set()
+
+        def dfs(clause):
+            if clause is None or clause in visited_clauses:
+                return None
+            if not clause.previous_clause and not clause.propagated_by:
+                visited_clauses.add(clause)
+                return clause
+            if clause.previous_clause and not clause.propagated_by:
+                dfs(clause.previous_clause)
+                return
+
+            clause = clause.get_preceeding_clause()
+            visited_clauses.add(clause)
+            # Recursively search previous clauses first to add any preceeding resolutions
+            previous_clause = clause.previous_clause.get_preceeding_clause()
+            propagated_by_clause = clause.propagated_by.get_preceeding_clause()
+            prev = dfs(previous_clause)
+            prop = dfs(propagated_by_clause)
+
+            # Current clause is a result of resolution between two clauses
+            # if clause.previous_clause and clause.propagated_by:
+                # resolution = (previous_clause, propagated_by_clause, clause)
+                # proofs.append(resolution)
+            if prev and prop:
+                resolution = (prev, prop, clause)
+                proofs.append(resolution)
+
+            return clause
+
+        dfs(self)
+        return proofs, visited_clauses
+
+    def get_preceeding_clause(self):
+        """ A clause could be generated as a result of a variable assignment """
+        clause = self
+        while clause.previous_clause and not clause.propagated_by:
+            clause = clause.previous_clause
+        return clause
+
+    def resolution_with(self, other, on_variable):
+        """ Resolution between two clauses using a given variable """
+        assert(on_variable in map(lambda x: x.get_variable(), self.literals),
+            "Clause should contain the variable")
+        assert(on_variable in map(lambda x: x.get_variable(), other.literals),
+            "Clause should contain the variable")
+        all_literals = list(set(self.literals + other.literals))
+        filtered_literals = tuple(filter(lambda x: x.get_variable() != on_variable, all_literals))
+        variables = set(map(lambda x: x.get_variable(), filtered_literals))
+        is_true = len(variables) < len(filtered_literals)
+        new_clause = Clause(filtered_literals)
+        return (new_clause, is_true)
 
