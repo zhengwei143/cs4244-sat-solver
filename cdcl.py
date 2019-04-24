@@ -70,7 +70,8 @@ def cdcl(assignment_list, clauses):
             # Need to backtrack one step further for clauses (as it will be reassigned without incrementing decision level in the next iteration)
             backtracked_clauses = list(map(lambda x: x.backtrack(backtrack_decision_level-1), clauses))
             backtracked_clauses.append(learnt_clause)
-            logging.debug("Learnt Clause: " + str(learnt_clause))
+            # logging.debug("Learnt Clause: " + str(learnt_clause))
+            # logging.debug(contradiction_clause.format_string())
             assignment_list.update_vsids_with(learnt_clause)
             did_backtrack = True
             clauses = backtracked_clauses
@@ -182,6 +183,9 @@ def run(filename):
             proofs, involved_clauses = empty_clause.generate_contradiction_proof()
             all_proofs.extend(proofs)
             all_involved_clauses.extend(involved_clauses)
+            output_contradiction_proof(proofs, involved_clauses)
+            logging.info("Learnt Clause: " + str(learnt_clause))
+            logging.info("Empty Clause: " + empty_clause.format_string())
         # output_contradiction_proof(all_proofs, all_involved_clauses)
         
         check_learnt_clauses(learnt_clauses)
@@ -214,12 +218,12 @@ def output_contradiction_proof(proofs, clauses):
 
     # Third segment - proofs:
     for previous_clause, propagated_by_clause, resultant_clause in proofs:
-        # print(previous_clause)
-        # print(previous_clause.previous_clause)
-        # print(previous_clause.propagated_by)
-        previous_id = ordered_clauses.index(previous_clause)
-        # print(propagated_by_clause)
-        propagated_by_id = ordered_clauses.index(propagated_by_clause)
-        resultant_id = ordered_clauses.index(resultant_clause)
-        resolution_line = " ".join(map(str, [previous_id, propagated_by_id, resultant_id]))
-        logging.info(resolution_line)
+        logging.info("Resolution: ")
+        logging.info(previous_clause.format_string())
+        logging.info(propagated_by_clause.format_string())
+        logging.info(resultant_clause.format_string())
+        # previous_id = ordered_clauses.index(previous_clause)
+        # propagated_by_id = ordered_clauses.index(propagated_by_clause)
+        # resultant_id = ordered_clauses.index(resultant_clause)
+        # resolution_line = " ".join(map(str, [previous_id, propagated_by_id, resultant_id]))
+        # logging.info(resolution_line)
