@@ -1,5 +1,6 @@
 import random
 from functools import reduce
+from collections import defaultdict
 import logging
 
 NOT = '-'
@@ -12,9 +13,12 @@ class Literal:
 
     def negation(self):
         """ Returns a negated copy of the Literal """
-        if NOT == self.value[0]:
+        if self.is_negation():
             return Literal(self.value[1:])
         return Literal(NOT + self.value)
+
+    def is_negation(self):
+        return NOT == self.value[0]
 
     def is_negation_of(self, other):
         """ Checks it the other Literal is the negation of the current Literal """
@@ -22,16 +26,14 @@ class Literal:
 
     def get_variable(self):
         """ Returns the variable string of the Literal """
-        if NOT == self.value[0]:
+        if self.is_negation():
             return self.value[1:]
         return self.value
 
     def evaluate(self, variable_assignment):
         """ Given a variable assignment evaluate the boolean value of the literal """
         variable_value = variable_assignment[self.get_variable()]
-        is_negation = (NOT == self.value[0])
-        return (not is_negation and variable_value) or (is_negation and not variable_value)
-
+        return (not self.is_negation() and variable_value) or (self.is_negation() and not variable_value)
 
     @staticmethod
     def init_from_variable(variable_string, value):
@@ -45,6 +47,9 @@ class Literal:
     
     def __str__(self):
         return self.value
+    
+    def __hash__(self):
+        return hash(self.value)
 
 class AssignmentList:
     """ Variables assignments are stored in the assignment list
@@ -54,13 +59,16 @@ class AssignmentList:
         - { variable string -> assignment history [True / False] (empty if not assigned a variable before) }
     :attribute assignments: Dictionary containing the variable and the decision level it was assigned
         - { variable string -> decision level }
+    :attribute vsids: Dictionary containing the literal and its count. Used in the pickbranching heuristic
     """
 
     def __init__(self, clauses):
         self.decision_level = 0
         self.assignments = {}
+        self.vsids = defaultdict(float)
         for clause in clauses:
             for literal in clause.literals:
+                self.vsids[literal] += 1
                 variable = literal.get_variable()
                 self.assignments[variable] = []
         self.decision_levels = {}
@@ -79,41 +87,27 @@ class AssignmentList:
         return (Literal(next_variable), value)
 
     def pickbranching_variable(self, did_backtrack):
-        """ Pickbranching to decide which variable to pick for assignment next
-        TODO: Implement pickbranching heuristic
-            - Temporarily finds the first unassigned variable
+        """ Pickbranching heuristic to decide which variable assignment to choose
+        Currently implementing VSIDS:
         """
-        variable = None
         if did_backtrack: # Select the variable at the current decision_level
             variable = list(filter(lambda x: x[1] == self.decision_level, self.decision_levels.items()))[0][0]
-        else:
-            for var, assignment in self.assignments.items():
-                if len(assignment) == 2 or var in self.decision_levels:
-                    continue
-                variable = var
-                break
-        if variable is None or len(self.assignments[variable]) == 2:
-            return (None, None)
-        if len(self.assignments[variable]) == 0:
-            values = [True, False]
-            random.shuffle(values)
-            value = values[0]
-        else:
             value = not self.assignments[variable][-1]
-        return (variable, value)
+            return (variable, value)
+        else:
+            # Predicate: variable must be unassigned at the current decision level
+            predicate = lambda x: x[0].get_variable() not in self.decision_levels
+            literal = max(filter(predicate, self.vsids.items()), key=lambda x: x[1])[0]
+            variable = literal.get_variable()
+            value = not literal.is_negation()
+            return (variable, value)
 
-    def value_to_assign(self, variable):
-        """ Decides what value to assign the next variable
-        TODO: Implement heuristic to decide value to assign
-            - Temporarily randomly picks first value to assign it
+    def update_vsids_with(self, clause):
+        """ When a clause is learnt,
+        update vsids by incrementing all the new literal counters by 1
         """
-        if len(self.assignments[variable]) == 2:
-            return None
-        if len(self.assignments[variable]) == 0:
-            values = [True, False]
-            random.shuffle(values)
-            return values[0]
-        return not self.assignments[variable][-1]
+        for literal in clause.literals:
+            self.vsids[literal] += 1
 
     def get_dl_variable_assignment(self, of_variable):
         """ Gets the value assigned to a given variable and the decision level it was assigned """
@@ -124,14 +118,14 @@ class AssignmentList:
         at_decision_level = self.decision_levels[of_variable]
         return (value_assigned, at_decision_level)
 
-    def get_backtrack_decision_level(self, min_decision_level):
+    def get_backtrack_decision_level(self, max_decision_level):
         """ Gets the decision level that we can backtrack to:
-        min_decision_level might already have two previous assignments, so we might need to backtrack further by one.
-        Find the maximum decision_level <= min_decision_level that does already have two assignments
+        max_decision_level might already have two previous assignments, so we might need to backtrack further by one.
+        Find the maximum decision_level <= max_decision_level that does already have two assignments
 
-        :param min_decision_level: Minimum decision level that lead to a contradiction (from conflict analysis)
+        :param max_decision_level: Minimum decision level that lead to a contradiction (from conflict analysis)
         """
-        predicate = lambda x: len(self.assignments[x[0]]) < 2 and x[1] <= min_decision_level
+        predicate = lambda x: len(self.assignments[x[0]]) < 2 and x[1] <= max_decision_level
         valid_items = list(filter(predicate, self.decision_levels.items()))
         if len(valid_items) == 0:
             return -1 
@@ -270,23 +264,25 @@ class Clause:
 
         dfs(self)
         new_literals = []
-        min_decision_level = len(assignment_list.assignments) + 1
+        max_decision_level = len(assignment_list.assignments) + 1
         for variable in variable_set:
             value_assigned, at_decision_level = assignment_list.get_dl_variable_assignment(variable)
             # Variables that were not assigned a value should not be added to the learnt clause
             if value_assigned is None:
                 continue
-            min_decision_level = max(min_decision_level, at_decision_level)
+            max_decision_level = max(max_decision_level, at_decision_level)
             literal = Literal.init_from_variable(variable, not value_assigned)
             new_literals.append(literal)
         
         assert(len(new_literals) != 0, "Newly learned clause should have non-empty literal list")
         
         # Newly learnt clause should start at decision level 0
-        return (Clause(new_literals, 0), min_decision_level)
+        return (Clause(new_literals, 0), max_decision_level)
 
     def evaluate(self, variable_assignment):
-        """ Given a variable assignment, evaluates the boolean value of the clause """
+        """ Given a variable assignment, evaluates the boolean value of the clause by:
+        Evaluating the disjuction of the evaluation of each literal
+        """
         result = False
         for literal in self.literals:
             result = result or literal.evaluate(variable_assignment)

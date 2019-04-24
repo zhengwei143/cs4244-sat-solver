@@ -56,9 +56,9 @@ def cdcl(assignment_list, clauses):
 
         did_succeed, result = unit_propagation(assignment_list.decision_level, clauses)
         if not did_succeed: # Conflict
-            learnt_clause, min_decision_level = result.learn_new_clause(assignment_list)
-            # Check if we can backtrack to min_decision_level
-            backtrack_decision_level = assignment_list.get_backtrack_decision_level(min_decision_level)
+            learnt_clause, max_decision_level = result.learn_new_clause(assignment_list)
+            # Check if we can backtrack to max_decision_level
+            backtrack_decision_level = assignment_list.get_backtrack_decision_level(max_decision_level)
             if backtrack_decision_level == -1:
                 logging.debug("Unable to backtrack any further...")
                 return (False, None)
@@ -67,6 +67,7 @@ def cdcl(assignment_list, clauses):
             # Need to backtrack one step further for clauses (as it will be reassigned without incrementing decision level in the next iteration)
             backtracked_clauses = list(map(lambda x: x.backtrack(backtrack_decision_level-1), clauses))
             backtracked_clauses.append(learnt_clause)
+            assignment_list.update_vsids_with(learnt_clause)
             # logging.debug("Clause learnt: " + str(learnt_clause))
             did_backtrack = True
             clauses = backtracked_clauses
@@ -138,6 +139,7 @@ def run(filename):
     variable_assignment = None
     if assignment_list:
         variable_assignment = assignment_list.get_variable_assignment()
+        # print("Verifying with variable assignment: ", variable_assignment)
         verified_result = verify(variable_assignment, clauses)
         if verified_result == result:
             print("Successfuly Verified to be: ", verified_result)
@@ -149,10 +151,10 @@ def run(filename):
 
 def verify(variable_assignment, clauses):
     """ Verifies a variable assignment against a list of clauses and outputs:
+    Evaluates the conjunction of the evaluation of each clause
         - True if SAT and False if UNSAT
     """
     result = True
     for clause in clauses:
         result = result and clause.evaluate(variable_assignment)
-    
     return result
