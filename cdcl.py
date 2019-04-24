@@ -64,6 +64,7 @@ def cdcl(assignment_list, clauses):
                 return (False, None)
             # logging.debug("backtracking to: " + str(backtrack_decision_level))
             assignment_list.backtrack(backtrack_decision_level)
+            # Need to backtrack one step further for clauses (as it will be reassigned without incrementing decision level in the next iteration)
             backtracked_clauses = list(map(lambda x: x.backtrack(backtrack_decision_level-1), clauses))
             backtracked_clauses.append(learnt_clause)
             # logging.debug("Clause learnt: " + str(learnt_clause))
@@ -138,6 +139,10 @@ def run(filename):
     if assignment_list:
         variable_assignment = assignment_list.get_variable_assignment()
         verified_result = verify(variable_assignment, clauses)
+        if verified_result == result:
+            print("Successfuly Verified to be: ", verified_result)
+        else:
+            print("ERROR Verified to be: ", verified_result, " but result was: ", result)
 
     return result, variable_assignment
 
@@ -146,7 +151,8 @@ def verify(variable_assignment, clauses):
     """ Verifies a variable assignment against a list of clauses and outputs:
         - True if SAT and False if UNSAT
     """
+    result = True
     for clause in clauses:
-        continue
-
-    return True
+        result = result and clause.evaluate(variable_assignment)
+    
+    return result

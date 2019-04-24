@@ -26,6 +26,13 @@ class Literal:
             return self.value[1:]
         return self.value
 
+    def evaluate(self, variable_assignment):
+        """ Given a variable assignment evaluate the boolean value of the literal """
+        variable_value = variable_assignment[self.get_variable()]
+        is_negation = (NOT == self.value[0])
+        return (not is_negation and variable_value) or (is_negation and not variable_value)
+
+
     @staticmethod
     def init_from_variable(variable_string, value):
         """ Creates a Literal from the a variable string (not negated) and its boolean value """
@@ -277,6 +284,13 @@ class Clause:
         
         # Newly learnt clause should start at decision level 0
         return (Clause(new_literals, 0), min_decision_level)
+
+    def evaluate(self, variable_assignment):
+        """ Given a variable assignment, evaluates the boolean value of the clause """
+        result = False
+        for literal in self.literals:
+            result = result or literal.evaluate(variable_assignment)
+        return result
 
     def __str__(self):
         if self.evaluated_true:
