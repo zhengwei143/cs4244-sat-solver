@@ -1,4 +1,5 @@
 from structures import *
+import time
 import logging
 
 logging.basicConfig(filename='debug.log', filemode='w', level=logging.DEBUG)
@@ -135,9 +136,15 @@ def find_unpropagated_unit_clause(clauses):
 
 def run(filename):
     assignment_list, clauses = parse_cnf(filename)
+    start = time.time()
     result, assignment_list = cdcl(assignment_list, clauses.copy())
+    end = time.time()
+    time_elapsed = end - start
+    logging.info("Time Elapsed: " + str(time_elapsed))
     variable_assignment = None
+    branching_count = None
     if assignment_list:
+        branching_count = assignment_list.branching_count
         variable_assignment = assignment_list.get_variable_assignment()
         # print("Verifying with variable assignment: ", variable_assignment)
         verified_result = verify(variable_assignment, clauses)
@@ -146,7 +153,7 @@ def run(filename):
         else:
             logging.info("ERROR Verified to be: " + str(verified_result) + " but result was: " + str(result))
 
-    return result, variable_assignment, assignment_list.branching_count
+    return result, variable_assignment, branching_count, time_elapsed
 
 
 def verify(variable_assignment, clauses):
