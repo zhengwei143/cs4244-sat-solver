@@ -67,7 +67,7 @@ class AssignmentList:
     """
 
     def __init__(self, clauses):
-        self.decision_level = 0
+        self.decision_level = -1
         self.assignments = {}
         self.vsids = defaultdict(float)
         self.vsids_division_constant = 2
@@ -191,7 +191,7 @@ class AssignmentList:
         predicate = lambda x: len(self.assignments[x[0]]) < 2 and x[1] <= max_decision_level
         valid_items = list(filter(predicate, self.decision_levels.items()))
         if len(valid_items) == 0:
-            return -1 
+            return -1
         return max(valid_items, key=lambda x: x[1])[1]
 
     def backtrack(self, to_decision_level):
@@ -240,15 +240,15 @@ class Clause:
     """
 
     def __init__(self, literals, decision_level = -1, evaluated_true = False,
-        previous_clause = None, propagated_by = None, hidden_literals = set()):
+        previous_clause = None, propagated_by = None, assigned_variables = set()):
         self.literals = literals
-        self.hidden_literals = hidden_literals
+        self.assigned_variables = assigned_variables
         self.decision_level = decision_level
         self.evaluated_true = evaluated_true
         self.previous_clause = previous_clause
         self.propagated_by = propagated_by
         self.unit_clause_propagated = False
-        self.learnt = None
+        self.learnt = False
 
     def is_unit_clause(self):
         return len(self.literals) == 1
@@ -265,12 +265,8 @@ class Clause:
             return self
         new_literals = tuple(filter(lambda x: x != literal.negation(), self.literals))
         
-        # If at the same level, modifies itself
-        # if self.decision_level == at_decision_level:
-        #     self.literals = new_literals
-        #     return self
-        hidden_literals = self.hidden_literals.union(unit_clause.hidden_literals)
-        new_clause = Clause(new_literals, at_decision_level, False, self, unit_clause, hidden_literals)
+        assigned_variables = self.assigned_variables.union(unit_clause.assigned_variables)
+        new_clause = Clause(new_literals, at_decision_level, False, self, unit_clause, assigned_variables)
         return new_clause
 
     def assign(self, variable, with_value, at_decision_level):
@@ -284,22 +280,22 @@ class Clause:
         #   Assigning True to a variable that exists in the clause or
         #   Assigning False to a variable has its negation in the clause 
         if with_value and variable in self.literals:
-            hidden_literals = self.hidden_literals.union([variable])
-            return Clause(self.literals, at_decision_level, True, self, None, hidden_literals)
+            assigned_variables = self.assigned_variables.union([variable])
+            return Clause(self.literals, at_decision_level, True, self, None, assigned_variables)
         elif not with_value and variable.negation() in self.literals:
-            hidden_literals = self.hidden_literals.union([variable.negation()])
-            return Clause(self.literals, at_decision_level, True, self, None, hidden_literals)
+            assigned_variables = self.assigned_variables.union([variable])
+            return Clause(self.literals, at_decision_level, True, self, None, assigned_variables)
         
         # Situation 2: When a literal in the clause no longer needs to be considered because it is False
         #   Remove any instance of the literal in the clause and return a new clause
         if with_value and variable.negation() in self.literals:
             new_literals = tuple(filter(lambda x: x != variable.negation(), self.literals))
-            hidden_literals = self.hidden_literals.union([variable.negation()])
-            return Clause(new_literals, at_decision_level, False, self, None, hidden_literals)
+            assigned_variables = self.assigned_variables.union([variable.negation()])
+            return Clause(new_literals, at_decision_level, False, self, None, assigned_variables)
         elif not with_value and variable in self.literals:
             new_literals = tuple(filter(lambda x: x != variable, self.literals))
-            hidden_literals = self.hidden_literals.union([variable])
-            return Clause(new_literals, at_decision_level, False, self, None, hidden_literals)
+            assigned_variables = self.assigned_variables.union([variable])
+            return Clause(new_literals, at_decision_level, False, self, None, assigned_variables)
 
         # A new clause is NOT created
         return self
@@ -354,6 +350,7 @@ class Clause:
             # Variables that were not assigned a value should not be added to the learnt clause
             if value_assigned is None:
                 continue
+            # max_decision_level = max(max_decision_level, at_decision_level)
             if max_decision_level < at_decision_level:
                 max_decision_level = at_decision_level
                 max_variable = variable
@@ -365,8 +362,8 @@ class Clause:
         
         # Newly learnt clause should start at decision level 0
         learnt_clause = Clause(tuple(new_literals), 0, False, self, None, set())
-        learnt_clause.learnt = max_variable
-        return (learnt_clause, max_decision_level)
+        learnt_clause.learnt = True
+        return (learnt_clause, max_decision_level, max_variable)
 
     def evaluate(self, variable_assignment):
         """ Given a variable assignment, evaluates the boolean value of the clause by:
@@ -382,12 +379,19 @@ class Clause:
             return '(TRUE)'
         return '(' + ', '.join(map(str, self.literals)) + ')'
 
-    def format_string(self):
+    def hidden_str(self):
         if self.evaluated_true:
             return '(TRUE)'
-        sorted_hidden_literals = sorted(list(self.hidden_literals))
-        all_literals = list(self.literals) + sorted_hidden_literals
-        return ' '.join(map(str, all_literals)) 
+        sorted_assigned_variables = sorted(list(self.assigned_variables))
+        return "(" + " ".join(map(str, self.literals)) + " " \
+            + " ".join(map(lambda x: "*" + str(x), sorted_assigned_variables)) + ")"
+
+    def output_format(self):
+        space = " "
+        if len(self.literals) == 0:
+            space = ""
+        return " ".join(map(str, self.literals)) + space \
+            + " ".join(map(str, self.assigned_variables))
 
     #####################################################
     # Methods to used in generating contradiction proof #
@@ -397,7 +401,9 @@ class Clause:
         """ Generates the proof of contradiction """
         assert(self.is_empty_clause(), "Should only be generating a proof for contradictions (empty clauses)")
         proofs = []
+        # Used to short-circuit the DFS
         visited_clauses = set()
+        used_clauses = set()
 
         def dfs(clause):
             if clause is None or clause in visited_clauses:
@@ -406,23 +412,28 @@ class Clause:
                 visited_clauses.add(clause)
                 return
 
-            if clause.learnt:
-                logging.debug("GENERATING PROOF FOR LEARNT CLAUSE: " + str(clause))
-            else:
-                logging.debug("Proof for Clause: " + str(clause))
+            # if clause.learnt:
+            #     logging.debug("GENERATING PROOF FOR LEARNT CLAUSE: " + str(clause))
+            # else:
+            #     logging.debug("Proof for Clause: " + clause.hidden_str())
 
             visited_clauses.add(clause)
+            # if clause.previous_clause:
+            #     logging.debug("Recurse Previous: " + clause.previous_clause.hidden_str())
+            # if clause.propagated_by:
+            #     logging.debug("Recurse Propagated: " + clause.propagated_by.hidden_str())
             dfs(clause.previous_clause)
             dfs(clause.propagated_by)
 
             # Current clause is a result of resolution between two clauses
             if clause.previous_clause and clause.propagated_by:
+                used_clauses.update([clause.previous_clause, clause.propagated_by, clause])
                 resolution = (clause.previous_clause, clause.propagated_by, clause)
                 proofs.append(resolution)
 
 
         dfs(self)
-        return proofs, visited_clauses
+        return proofs, used_clauses
 
     def get_preceeding_clause(self):
         """ A clause could be generated as a result of a variable assignment """

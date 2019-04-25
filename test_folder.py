@@ -1,10 +1,8 @@
 from cdcl import *
 import os
 
-# testFolder = 'test-data'
-# testFolder = 'test-small' # Taking forever
-testFolder = 'uf50' # Seems to be correct
-# testFolder = 'uuf50'
+# testFolder = 'uf50' # SAT
+testFolder = 'uuf50' # UNSAT
 total = 0
 total_branches = 0
 success = 0
@@ -15,7 +13,6 @@ for file in os.listdir(testFolder):
 
     print(file)
     # Benchmark
-    # isSatisfiable = 'yes' in file
     isSatisfiable = 'uuf' not in file
     
     filepath = os.path.join(testFolder, file)
