@@ -32,7 +32,7 @@ def neighbour(type1, attr1, type2, attr2):
                 end_token))
     return '\n'.join(cnf) + '\n'
 
-def conjunction(type1, attr1, type2, attr2):
+def bi_implication(type1, attr1, type2, attr2):
     cnf = []
     for i in range(1, num_hse+1):
         cnf.append("-{} {} {}".format(eval(i, type1, attr1), eval(i, type2, attr2), end_token))
@@ -65,13 +65,13 @@ def generate_einstein_cnf():
     cnf_file.write(add_assumptions())
 
     # The Brit lives in the red house
-    cnf_file.write(conjunction(nationality, "brit", color, "red"))
+    cnf_file.write(bi_implication(nationality, "brit", color, "red"))
 
     # The Swede keeps dogs as pets
-    cnf_file.write(conjunction(nationality, "swede", pet, "dogs"))
+    cnf_file.write(bi_implication(nationality, "swede", pet, "dogs"))
 
     # The Dane drinks tea
-    cnf_file.write(conjunction(nationality, "dane", drink, "tea"))
+    cnf_file.write(bi_implication(nationality, "dane", drink, "tea"))
 
     # The green house is on the left of the white house
     cnf_file.write("-{} {} {} {} {} {}\n".format(eval(1, color, "green"), eval(2, color, "white"), eval(3, color, "white"), eval(4, color, "white"), eval(5, color, "white"), end_token))
@@ -81,13 +81,13 @@ def generate_einstein_cnf():
     cnf_file.write("-{} {}\n".format(eval(5, color, "green"),end_token))
 
     # The green house's owner drinks coffee
-    cnf_file.write(conjunction(drink, "coffee", color, "green"))
+    cnf_file.write(bi_implication(drink, "coffee", color, "green"))
 
     # The person who smokes Pall Mall rears birds
-    cnf_file.write(conjunction(cigarette, "pallmall", pet, "birds"))
+    cnf_file.write(bi_implication(cigarette, "pallmall", pet, "birds"))
 
     # The owner of the yellow house smokes Dunhill
-    cnf_file.write(conjunction(color, "yellow", cigarette, "dunhill"))
+    cnf_file.write(bi_implication(color, "yellow", cigarette, "dunhill"))
 
     # The man living in the center house drinks milk
     cnf_file.write("{} {}\n".format(eval(3, drink, "milk"), end_token))
@@ -102,10 +102,10 @@ def generate_einstein_cnf():
     cnf_file.write(neighbour(pet, "horses", cigarette, "dunhill"))
     
     # The owner who smokes Bluemasters drinks beer
-    cnf_file.write(conjunction(cigarette, "bluemaster", drink, "beer"))
+    cnf_file.write(bi_implication(cigarette, "bluemaster", drink, "beer"))
 
     # The German smokes Prince
-    cnf_file.write(conjunction(nationality, "german", cigarette, "prince"))
+    cnf_file.write(bi_implication(nationality, "german", cigarette, "prince"))
 
     # The Norwegian lives next to the blue house
     cnf_file.write("{} {}\n".format(eval(2, color, "blue"), end_token))
