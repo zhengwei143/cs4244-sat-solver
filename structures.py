@@ -70,6 +70,8 @@ class AssignmentList:
         self.decision_level = 0
         self.assignments = {}
         self.vsids = defaultdict(float)
+        self.vsids_division_constant = 2
+        self.vsids_backtrack_threshold = 10
         for clause in clauses:
             for literal in clause.literals:
                 self.vsids[literal] += 1
@@ -77,6 +79,11 @@ class AssignmentList:
                 self.assignments[variable] = []
         self.decision_levels = {}
         self.branching_count = 0
+        self.backtrack_count = 0
+
+    ###################################################
+    # Methods for variable assignment / pickbranching #
+    ###################################################
 
     def assign_next(self, did_backtrack):
         """ Assigns the next variable with a boolean value,
@@ -93,6 +100,7 @@ class AssignmentList:
 
     def pickbranching_variable(self, did_backtrack):
         # Choose pickbranching implementation here.
+        self.branching_count += 1
         return self.pickbranching_variable_vsids(did_backtrack)
         # return self.pickbranching_variable_random(did_backtrack)
 
@@ -101,9 +109,10 @@ class AssignmentList:
         Currently implementing VSIDS:
         """
         if did_backtrack: # Select the variable at the current decision_level
+            self.did_backtrack_divide_vsids()
             variable = list(filter(lambda x: x[1] == self.decision_level, self.decision_levels.items()))[0][0]
             value = not self.assignments[variable][-1]
-            self.branching_count += 1
+            
             return (variable, value)
         else:
             # Predicate: variable must be unassigned at the current decision level
@@ -119,8 +128,8 @@ class AssignmentList:
         """
         variable = None
         if did_backtrack: # Select the variable at the current decision_level
+            self.did_backtrack_divide_vsids()
             variable = list(filter(lambda x: x[1] == self.decision_level, self.decision_levels.items()))[0][0]
-            self.branching_count += 1
         else:
             for var, assignment in self.assignments.items():
                 if len(assignment) == 2 or var in self.decision_levels:
@@ -137,12 +146,31 @@ class AssignmentList:
             value = not self.assignments[variable][-1]
         return (variable, value)
 
+    #####################
+    # Methods for VSIDS #
+    #####################
+
     def update_vsids_with(self, clause):
         """ When a clause is learnt,
         update vsids by incrementing all the new literal counters by 1
         """
         for literal in clause.literals:
             self.vsids[literal] += 1
+
+    def did_backtrack_divide_vsids(self):
+        """ Called everytime it backtracks, keeps counter and
+        decides whether to divide the vsids values
+        """
+        self.backtrack_count += 1
+        if self.backtrack_count < self.vsids_backtrack_threshold:
+            return
+        self.backtrack_count = 0
+        for variable in self.vsids:
+            self.vsids[variable] /= self.vsids_division_constant
+
+    ###############################################
+    # Methods for backtracking the AssignmentList #
+    ###############################################
 
     def get_dl_variable_assignment(self, of_variable):
         """ Gets the value assigned to a given variable and the decision level it was assigned """
@@ -174,6 +202,10 @@ class AssignmentList:
             if decision_level > to_decision_level:
                 del self.decision_levels[variable]
                 self.assignments[variable] = []
+
+    ##########################
+    # AssignmentList Helpers #
+    ##########################
 
     def all_values_assigned(self):
         """ Checks if all values are assigned """
@@ -234,9 +266,9 @@ class Clause:
         new_literals = tuple(filter(lambda x: x != literal.negation(), self.literals))
         
         # If at the same level, modifies itself
-        if self.decision_level == at_decision_level:
-            self.literals = new_literals
-            return self
+        # if self.decision_level == at_decision_level:
+        #     self.literals = new_literals
+        #     return self
         hidden_literals = self.hidden_literals.union(unit_clause.hidden_literals)
         new_clause = Clause(new_literals, at_decision_level, False, self, unit_clause, hidden_literals)
         return new_clause
@@ -315,7 +347,7 @@ class Clause:
 
         dfs(self)
         new_literals = []
-        max_decision_level = -1
+        max_decision_level = 0
         max_variable = None
         for variable in variable_set:
             value_assigned, at_decision_level = assignment_list.get_dl_variable_assignment(variable)
@@ -325,6 +357,7 @@ class Clause:
             if max_decision_level < at_decision_level:
                 max_decision_level = at_decision_level
                 max_variable = variable
+            # Flip the previous value assigned to the variable
             literal = Literal.init_from_variable(variable, not value_assigned)
             new_literals.append(literal)
         
@@ -353,8 +386,8 @@ class Clause:
         if self.evaluated_true:
             return '(TRUE)'
         sorted_hidden_literals = sorted(list(self.hidden_literals))
-        literals = list(self.literals) + sorted_hidden_literals
-        return ' '.join(map(str, literals)) 
+        all_literals = list(self.literals) + sorted_hidden_literals
+        return ' '.join(map(str, all_literals)) 
 
     #####################################################
     # Methods to used in generating contradiction proof #
@@ -368,31 +401,25 @@ class Clause:
 
         def dfs(clause):
             if clause is None or clause in visited_clauses:
-                return None
-            if not clause.previous_clause and not clause.propagated_by:
+                return
+            if not clause.previous_clause and not clause.propagated_by: # Root clause
                 visited_clauses.add(clause)
-                return clause
-            if clause.previous_clause and not clause.propagated_by:
-                dfs(clause.previous_clause)
                 return
 
-            clause = clause.get_preceeding_clause()
+            if clause.learnt:
+                logging.debug("GENERATING PROOF FOR LEARNT CLAUSE: " + str(clause))
+            else:
+                logging.debug("Proof for Clause: " + str(clause))
+
             visited_clauses.add(clause)
-            # Recursively search previous clauses first to add any preceeding resolutions
-            previous_clause = clause.previous_clause.get_preceeding_clause()
-            propagated_by_clause = clause.propagated_by.get_preceeding_clause()
-            prev = dfs(previous_clause)
-            prop = dfs(propagated_by_clause)
+            dfs(clause.previous_clause)
+            dfs(clause.propagated_by)
 
             # Current clause is a result of resolution between two clauses
-            # if clause.previous_clause and clause.propagated_by:
-                # resolution = (previous_clause, propagated_by_clause, clause)
-                # proofs.append(resolution)
-            if prev and prop:
-                resolution = (prev, prop, clause)
+            if clause.previous_clause and clause.propagated_by:
+                resolution = (clause.previous_clause, clause.propagated_by, clause)
                 proofs.append(resolution)
 
-            return clause
 
         dfs(self)
         return proofs, visited_clauses

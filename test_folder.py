@@ -3,8 +3,8 @@ import os
 
 # testFolder = 'test-data'
 # testFolder = 'test-small' # Taking forever
-testFolder = 'uf50-218' # Seems to be correct
-testFolder = 'uuf50'
+testFolder = 'uf50' # Seems to be correct
+# testFolder = 'uuf50'
 total = 0
 total_branches = 0
 success = 0
@@ -13,12 +13,9 @@ for file in os.listdir(testFolder):
     if '.cnf' not in file:
         continue
 
-# if '100' in file or '200' in file:
-#        continue
-
+    print(file)
     # Benchmark
     # isSatisfiable = 'yes' in file
-    print(file)
     isSatisfiable = 'uuf' not in file
     
     filepath = os.path.join(testFolder, file)
