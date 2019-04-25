@@ -387,6 +387,8 @@ class Clause:
             + " ".join(map(lambda x: "*" + str(x), sorted_assigned_variables)) + ")"
 
     def output_format(self):
+        if len(self.literals) == 0 and len(self.assigned_variables) == 0:
+            return "-1"
         space = " "
         if len(self.literals) == 0:
             space = ""

@@ -8,7 +8,7 @@ logging.basicConfig(filename='debug.log', filemode='w', level=logging.DEBUG)
 COMMENT = 'c'
 INFO = 'p'
 
-OUTPUT_RESULTS_TO_FILE = False
+OUTPUT_RESULTS_TO_FILE = True
 OUTPUT_DIRECTORY = "results\\"
 
 def parse_cnf(filename):
@@ -31,13 +31,15 @@ def parse_cnf(filename):
 
 def cdcl(assignment_list, clauses):
     """ Conflict Driven Clause Learning Algorithm 
-    returns: (SAT/UNSAT boolean, AssignmentList, learnt_clauses)
+    returns: (SAT/UNSAT boolean, AssignmentList, contradiction_clauses)
     """
-    did_succeed, new_clauses, contradiction_clause = unit_propagation(assignment_list.decision_level, clauses)
+    contradiction_clauses = []
 
+    did_succeed, new_clauses, contradiction_clause = unit_propagation(assignment_list.decision_level, clauses)
     if not did_succeed:
+        contradiction_clauses.append(contradiction_clause)
         # logging.debug("did not succeed after first propagation")
-        return (False, assignment_list, contradiction_clause)
+        return (False, assignment_list, contradiction_clauses)
     
     did_backtrack = False
     while not assignment_list.all_values_assigned() or did_backtrack:
@@ -55,6 +57,7 @@ def cdcl(assignment_list, clauses):
 
         did_succeed, new_clauses, contradiction_clause = unit_propagation(assignment_list.decision_level, clauses)
         if not did_succeed: # Conflict
+            contradiction_clauses.append(contradiction_clause)
             learnt_clause, max_decision_level, max_variable = contradiction_clause.learn_new_clause(assignment_list)
             # Check if we can backtrack to max_decision_level
             backtrack_decision_level = assignment_list.get_backtrack_decision_level(max_decision_level)
@@ -62,7 +65,7 @@ def cdcl(assignment_list, clauses):
                 + ", to dl: " + str(backtrack_decision_level))
             if backtrack_decision_level == -1:
                 logging.debug("Unable to backtrack any further...")
-                return (False, assignment_list, contradiction_clause)
+                return (False, assignment_list, contradiction_clauses)
             
             assignment_list.backtrack(backtrack_decision_level)
             # Need to backtrack one step further for clauses (as it will be reassigned without incrementing decision level in the next iteration)
@@ -81,7 +84,7 @@ def cdcl(assignment_list, clauses):
         if clause.is_empty_clause():
             logging.debug("CONTRADICTION FOUND WHERE IT RETURNS BE SAT")
 
-    return (True, assignment_list, None)
+    return (True, assignment_list, [])
 
 
 def unit_propagation(decision_level, clauses):
@@ -131,7 +134,7 @@ def find_unpropagated_unit_clause(clauses):
 def run(filename):
     assignment_list, clauses = parse_cnf(filename)
     start = time.time()
-    result, assignment_list, contradiction_clause = cdcl(assignment_list, clauses.copy())
+    result, assignment_list, contradiction_clauses = cdcl(assignment_list, clauses.copy())
     
     end = time.time()
     time_elapsed = end - start
@@ -145,10 +148,17 @@ def run(filename):
         else:
             logging.info("ERROR Verified to be: " + str(verified_result) + " but result was: " + str(result))
     else: # Contradiction
-        proofs, clauses_involved = contradiction_clause.generate_contradiction_proof()
+        all_proofs = []
+        all_clauses_involved = []
+        # Goes in order of created contradiction clauses
+        for contradiction_clause in contradiction_clauses:
+            proofs, clauses_involved = contradiction_clause.generate_contradiction_proof()
+            all_proofs.extend(proofs)
+            all_clauses_involved.extend(clauses_involved)
+
         filename = filename.split('\\')[-1]
         output_filename = OUTPUT_DIRECTORY + "results-" + filename.replace(".cnf", "") + ".txt"
-        output_contradiction_proof(proofs, clauses_involved, output_filename)
+        output_contradiction_proof(all_proofs, all_clauses_involved, output_filename)
         
     return result, variable_assignment, assignment_list.branching_count, time_elapsed
 
@@ -188,8 +198,14 @@ def output_contradiction_proof(proofs, clauses, output_filename):
         if OUTPUT_RESULTS_TO_FILE:
             output_file.write(clause_identifier_line + "\n")
 
+    # Used to prevent duplicate proofs
+    proven_clauses = set()
+
     # Third segment - proofs:
     for previous_clause, propagated_by_clause, resultant_clause in proofs:
+        if resultant_clause in proven_clauses:
+            continue
+        proven_clauses.add(resultant_clause)
         previous_id = ordered_clauses.index(previous_clause)
         propagated_by_id = ordered_clauses.index(propagated_by_clause)
         resultant_id = ordered_clauses.index(resultant_clause)
