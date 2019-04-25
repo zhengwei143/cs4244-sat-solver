@@ -1,10 +1,15 @@
 from structures import *
 import time
 import logging
+import os
+import errno
 
 logging.basicConfig(filename='debug.log', filemode='w', level=logging.DEBUG)
 COMMENT = 'c'
 INFO = 'p'
+
+OUTPUT_RESULTS_TO_FILE = False
+OUTPUT_DIRECTORY = "results\\"
 
 def parse_cnf(filename):
     file = open(filename, 'r')
@@ -14,7 +19,6 @@ def parse_cnf(filename):
         # Skip comments or info lines
         if not line or COMMENT == line[0] or INFO == line[0]:
             continue
-        # print(line.strip())
         # Ignore last value
         literal_strings = line.split()[:-1]
         if len(literal_strings) == 0:
@@ -51,13 +55,15 @@ def cdcl(assignment_list, clauses):
 
         did_succeed, new_clauses, contradiction_clause = unit_propagation(assignment_list.decision_level, clauses)
         if not did_succeed: # Conflict
-            learnt_clause, max_decision_level = contradiction_clause.learn_new_clause(assignment_list)
+            learnt_clause, max_decision_level, max_variable = contradiction_clause.learn_new_clause(assignment_list)
             # Check if we can backtrack to max_decision_level
             backtrack_decision_level = assignment_list.get_backtrack_decision_level(max_decision_level)
+            logging.info("Contradiction clause: " + contradiction_clause.hidden_str() + ", with var: " + str(max_variable) \
+                + ", to dl: " + str(backtrack_decision_level))
             if backtrack_decision_level == -1:
                 logging.debug("Unable to backtrack any further...")
                 return (False, assignment_list, contradiction_clause)
-
+            
             assignment_list.backtrack(backtrack_decision_level)
             # Need to backtrack one step further for clauses (as it will be reassigned without incrementing decision level in the next iteration)
             backtracked_clauses = list(map(lambda x: x.backtrack(backtrack_decision_level-1), clauses))
@@ -115,7 +121,6 @@ def unit_propagation(decision_level, clauses):
 
     return (True, clauses, None)
 
-
 def find_unpropagated_unit_clause(clauses):
     """ Finds an unpropagated unit clause """
     for clause in clauses:
@@ -134,16 +139,16 @@ def run(filename):
     variable_assignment = None
     if result:
         variable_assignment = assignment_list.get_variable_assignment()
-        # print("Verifying with variable assignment: ", variable_assignment)
         verified_result = verify(variable_assignment, clauses)
         if verified_result == result:
             logging.info("Successfuly Verified to be: " + str(verified_result))
         else:
             logging.info("ERROR Verified to be: " + str(verified_result) + " but result was: " + str(result))
     else: # Contradiction
-        # logging.info("Number of learnt clauses: " + str(len(learnt_clauses)))
         proofs, clauses_involved = contradiction_clause.generate_contradiction_proof()
-        output_contradiction_proof(proofs, clauses_involved)
+        filename = filename.split('\\')[-1]
+        output_filename = OUTPUT_DIRECTORY + "results-" + filename.replace(".cnf", "") + ".txt"
+        output_contradiction_proof(proofs, clauses_involved, output_filename)
         
     return result, variable_assignment, assignment_list.branching_count, time_elapsed
 
@@ -157,34 +162,43 @@ def verify(variable_assignment, clauses):
         result = result and clause.evaluate(variable_assignment)
     return result
 
-def output_contradiction_proof(proofs, clauses):
+def output_contradiction_proof(proofs, clauses, output_filename):
     """ Logs the contradiction proof in the required format to a file """
     # Sorts the clauses by order of increasing decision level
     ordered_clauses = sorted(list(clauses), key=lambda x: x.decision_level)
+    if OUTPUT_RESULTS_TO_FILE:
+        if not os.path.exists(os.path.dirname(output_filename)):
+            try:
+                os.makedirs(os.path.dirname(output_filename))
+            except OSError as exc: # Guard against race condition
+                if exc.errno != errno.EEXIST:
+                    raise
+        output_file = open(output_filename, 'w')
 
     # First segment - number of clauses used in proof
     initial_line = "v " + str(len(ordered_clauses))
-    logging.info(initial_line)
+    # logging.info(initial_line)
+    if OUTPUT_RESULTS_TO_FILE:
+        output_file.write(initial_line + "\n")
 
     # Second segment - clauses and their unique ids
     for i, clause in enumerate(ordered_clauses):
-        # clause_identifier_line = str(i) + ": " + clause.format_string()
-        clause_identifier_line = str(i) + ": " + str(clause)
-        logging.info(clause_identifier_line)
+        clause_identifier_line = str(i) + ": " + clause.output_format()
+        # logging.info(clause_identifier_line)
+        if OUTPUT_RESULTS_TO_FILE:
+            output_file.write(clause_identifier_line + "\n")
 
     # Third segment - proofs:
     for previous_clause, propagated_by_clause, resultant_clause in proofs:
-        
-        # logging.info(previous_clause.format_string())
-        # logging.info(propagated_by_clause.format_string())
-        # logging.info(resultant_clause.format_string())
-        if resultant_clause.learnt:
-            logging.info("Output proof for Learnt Clause: " + str(resultant_clause))
-
         previous_id = ordered_clauses.index(previous_clause)
-        print(str(previous_clause), str(propagated_by_clause), str(resultant_clause))
         propagated_by_id = ordered_clauses.index(propagated_by_clause)
         resultant_id = ordered_clauses.index(resultant_clause)
-        resolution_line = "Resolution: " + " ".join(map(str, [previous_id, propagated_by_id, resultant_id]))
-        logging.info(resolution_line)
-        logging.info(str(previous_clause) + ", " + str(propagated_by_clause) + " -> " + str(resultant_clause))
+        resolution_line = " ".join(map(str, [previous_id, propagated_by_id, resultant_id]))
+        # logging.info(resolution_line)
+        # logging.info(previous_clause.hidden_str() + ", " + propagated_by_clause.hidden_str() + " -> " + resultant_clause.hidden_str())
+        if OUTPUT_RESULTS_TO_FILE:
+            output_file.write(resolution_line + "\n")
+
+        if resultant_clause.is_empty_clause():
+            logging.info("Learnt Clause generated: " + resultant_clause.hidden_str())
+
