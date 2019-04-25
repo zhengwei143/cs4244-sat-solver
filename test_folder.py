@@ -1,8 +1,12 @@
 from cdcl import *
 import os
 
+# testFolder = 'uf20' # SAT
 # testFolder = 'uf50' # SAT
 testFolder = 'uuf50' # UNSAT
+# testFolder = 'uf75' # SAT
+# testFolder = 'uuf75' # UNSAT
+
 total = 0
 total_branches = 0
 success = 0
